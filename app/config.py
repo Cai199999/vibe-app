@@ -7,6 +7,7 @@
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # 项目根目录（app/config.py 的上两级）
@@ -20,6 +21,7 @@ class Settings(BaseSettings):
         env_file=BASE_DIR / ".env",
         env_file_encoding="utf-8",
         extra="ignore",  # 忽略 .env 中未声明的变量，便于平滑扩展
+        populate_by_name=True,  # 兼容测试中 Settings(prompt_provider=...) 的写法
     )
 
     # ---- 应用 ----
@@ -45,8 +47,14 @@ class Settings(BaseSettings):
     minio_secure: bool = False
 
     # ---- Prompt 服务 ----
-    # mock: 本地固定 Markdown；deepseek: 调用真实 API
-    prompt_provider: str = "mock"
+    # 统一模型提供方：mock / deepseek / ollama。
+    # 优先读取 LLM_PROVIDER；旧变量 PROMPT_PROVIDER 作为兼容别名。
+    llm_provider: str = Field(
+        default="mock",
+        validation_alias=AliasChoices("LLM_PROVIDER", "PROMPT_PROVIDER"),
+    )
+    # 发送给模型前是否脱敏（邮箱 / 手机号 / AK/SK / Token 等），默认开启。
+    redact_sensitive: bool = True
     # 默认只允许 localhost / 127.0.0.1 / ::1；开启后允许任意合法 http(s) 主机。
     allow_remote_projects: bool = False
     allowed_origins: str = "http://127.0.0.1:5174,http://localhost:5174"
@@ -60,6 +68,18 @@ class Settings(BaseSettings):
     deepseek_timeout_seconds: float = 30.0
     deepseek_max_tokens: int = 2000
     deepseek_temperature: float = 0.2
+
+    # ---- Ollama（本地 / 局域网，OpenAI 兼容接口） ----
+    # 直连示例：http://127.0.0.1:11434 或 http://192.168.1.20:11434
+    ollama_base_url: str = "http://127.0.0.1:11434"
+    ollama_model: str = "qwen2.5:7b"
+    # 留空表示不支持截图；配置视觉模型后自动启用多模态路径。
+    ollama_vision_model: str = ""
+    ollama_timeout_seconds: float = 120.0
+    ollama_max_tokens: int = 2000
+    ollama_temperature: float = 0.2
+    # 直连 Ollama 通常为空；经反向代理 / 网关时按需填写。
+    ollama_api_key: str = ""
 
     # ---- 接口上限（与 03.API接口设计.md 对齐） ----
     max_snapshot_elements: int = 200

@@ -16,6 +16,9 @@ from app.services.prompt_context import build_prompt_context
 from app.services.prompt_generator import (
     DeepSeekPromptGenerator,
     GeneratedPrompt,
+    OllamaPromptGenerator,
+    RedactingPromptGenerator,
+    build_prompt_generator,
 )
 from app.services.prompt_service import PromptService
 
@@ -286,3 +289,205 @@ def test_deepseek_image_route_uses_vision_model_and_red_prompt() -> None:
     assert "imageDataUrl" not in text_part["text"]
     assert "红色轨迹圈住顶部搜索框" in text_part["text"]
     assert "搜索框" in result.content
+
+
+# ---------------------------------------------------------------- 脱敏
+
+
+def _sensitive_request() -> PromptGenerateRequest:
+    payload = _request().model_dump(by_alias=True)
+    payload["annotations"][0]["intent"] = "联系 alice@example.com 或 13800138000"
+    payload["annotations"][0]["jsxSnippet"]["content"] = (
+        '<a href="mailto:alice@example.com" data-token="a1b2c3d4e5f6g7h8">' "联系</a>"
+    )
+    return PromptGenerateRequest.model_validate(payload)
+
+
+def test_service_redacts_sensitive_text_before_model() -> None:
+    """真实服务链路中，邮箱 / 手机号 / Token 不能出现在 Prompt 里。"""
+    service = PromptService(
+        Settings(prompt_provider="mock", redact_sensitive=True),
+    )
+
+    result = asyncio.run(service.generate(_sensitive_request()))
+    content = result.prompt.content
+
+    assert "alice@example.com" not in content
+    assert "13800138000" not in content
+    assert "a1b2c3d4e5f6g7h8" not in content
+    assert "[REDACTED]" in content
+    # 文件路径必须保留，否则执行端无法定位。
+    assert "src/components/Button.tsx" in content
+    assert result.prompt.target_files == ["src/components/Button.tsx"]
+
+
+def test_service_keeps_sensitive_text_when_redaction_disabled() -> None:
+    service = PromptService(
+        Settings(prompt_provider="mock", redact_sensitive=False),
+    )
+
+    result = asyncio.run(service.generate(_sensitive_request()))
+
+    assert "alice@example.com" in result.prompt.content
+    assert "[REDACTED]" not in result.prompt.content
+
+
+# ---------------------------------------------------------------- Ollama
+
+
+def _ollama_settings(**overrides: Any) -> Settings:
+    values: dict[str, Any] = {
+        "llm_provider": "ollama",
+        "ollama_base_url": "http://127.0.0.1:11434",
+        "ollama_model": "qwen2.5:7b",
+        "ollama_vision_model": "",
+    }
+    values.update(overrides)
+    return Settings(**values)
+
+
+def _ollama_handler(
+    captured: dict[str, Any],
+    *,
+    content: str = "src/components/Button.tsx\n\n## 修改任务\n调整按钮。",
+) -> Any:
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["url"] = str(request.url)
+        captured["headers"] = dict(request.headers)
+        captured["payload"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": content}}],
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 5,
+                    "total_tokens": 15,
+                },
+            },
+        )
+
+    return handler
+
+
+def test_ollama_uses_openai_compatible_endpoint_without_auth() -> None:
+    captured: dict[str, Any] = {}
+    generator = OllamaPromptGenerator(
+        _ollama_settings(),
+        transport=httpx.MockTransport(_ollama_handler(captured)),
+    )
+
+    result = asyncio.run(
+        generator.generate(build_prompt_context(_request(), include_image=False))
+    )
+
+    assert captured["url"] == "http://127.0.0.1:11434/v1/chat/completions"
+    assert "authorization" not in captured["headers"]
+    assert captured["payload"]["model"] == "qwen2.5:7b"
+    assert captured["payload"]["stream"] is False
+    assert result.provider == "ollama"
+    assert result.model == "qwen2.5:7b"
+    assert result.usage == {
+        "prompt_tokens": 10,
+        "completion_tokens": 5,
+        "total_tokens": 15,
+    }
+
+
+def test_ollama_accepts_base_url_ending_with_v1() -> None:
+    captured: dict[str, Any] = {}
+    generator = OllamaPromptGenerator(
+        _ollama_settings(ollama_base_url="http://127.0.0.1:11434/v1/"),
+        transport=httpx.MockTransport(_ollama_handler(captured)),
+    )
+
+    asyncio.run(
+        generator.generate(build_prompt_context(_request(), include_image=False))
+    )
+
+    assert captured["url"] == "http://127.0.0.1:11434/v1/chat/completions"
+
+
+def test_ollama_uses_vision_model_when_configured() -> None:
+    captured: dict[str, Any] = {}
+    generator = OllamaPromptGenerator(
+        _ollama_settings(ollama_vision_model="qwen2.5vl:7b"),
+        transport=httpx.MockTransport(_ollama_handler(captured)),
+    )
+
+    result = asyncio.run(
+        generator.generate(build_prompt_context(_visual_request(), include_image=True))
+    )
+
+    assert captured["payload"]["model"] == "qwen2.5vl:7b"
+    user_content = captured["payload"]["messages"][1]["content"]
+    assert any(
+        part.get("type") == "image_url"
+        and part["image_url"]["url"] == TINY_PNG_DATA_URL
+        for part in user_content
+    )
+    assert result.model == "qwen2.5vl:7b"
+    assert generator.supports_images is True
+
+
+def test_ollama_rejects_image_without_vision_model() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("未配置视觉模型时不应发起 HTTP 请求")
+
+    generator = OllamaPromptGenerator(
+        _ollama_settings(ollama_vision_model=""),
+        transport=httpx.MockTransport(handler),
+    )
+
+    with pytest.raises(ApiError) as exc_info:
+        asyncio.run(
+            generator.generate(
+                build_prompt_context(_visual_request(), include_image=True)
+            )
+        )
+
+    assert exc_info.value.code == "MODEL_UNAVAILABLE"
+    assert "OLLAMA_VISION_MODEL" in exc_info.value.message
+
+
+def test_ollama_requires_model_name() -> None:
+    generator = OllamaPromptGenerator(_ollama_settings(ollama_model=""))
+
+    with pytest.raises(ApiError) as exc_info:
+        asyncio.run(generator.generate({}))
+
+    assert exc_info.value.code == "MODEL_UNAVAILABLE"
+    assert "OLLAMA_MODEL" in exc_info.value.message
+
+
+def test_ollama_gateway_api_key_adds_bearer_header() -> None:
+    captured: dict[str, Any] = {}
+    generator = OllamaPromptGenerator(
+        _ollama_settings(ollama_api_key="gateway-key"),
+        transport=httpx.MockTransport(_ollama_handler(captured)),
+    )
+
+    asyncio.run(
+        generator.generate(build_prompt_context(_request(), include_image=False))
+    )
+
+    assert captured["headers"]["authorization"] == "Bearer gateway-key"
+
+
+def test_build_prompt_generator_selects_ollama() -> None:
+    generator = build_prompt_generator(_ollama_settings())
+
+    assert generator.provider == "ollama"
+    assert generator.model == "qwen2.5:7b"
+    assert generator.supports_images is False
+    # 默认开启脱敏，生成器应被中间件包装。
+    assert isinstance(generator, RedactingPromptGenerator)
+
+
+def test_llm_provider_alias_prefers_new_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+    monkeypatch.setenv("PROMPT_PROVIDER", "deepseek")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.llm_provider == "ollama"

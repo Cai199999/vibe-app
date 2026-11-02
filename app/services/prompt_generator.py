@@ -15,6 +15,7 @@ import httpx
 
 from app.config import Settings
 from app.core.errors import ApiError
+from app.core.redaction import redact_prompt_context
 
 logger = logging.getLogger(__name__)
 
@@ -350,39 +351,69 @@ _VISION_SYSTEM_PROMPT = _SYSTEM_PROMPT + """
 """
 
 
-class DeepSeekPromptGenerator:
-    """DeepSeek OpenAI 兼容接口调用。
+class _OpenAICompatiblePromptGenerator:
+    """OpenAI 兼容 Chat Completions 的共享实现。
 
-    默认使用 DEEPSEEK_MODEL 处理纯文本；请求携带顶层截图时，
-    切换到 DEEPSEEK_VISION_MODEL（默认 deepseek-flash）并发送图文消息。
+    DeepSeek 与 Ollama 都实现该协议；差异只在地址、鉴权、
+    模型名称与错误提示，避免维护两份几乎相同的请求代码。
     """
 
-    provider = "deepseek"
+    provider = "openai-compatible"
+    display_name = "模型"
+    connection_hint = "请检查本地网络与配置。"
+    vision_model_missing_message = (
+        "当前模型未配置视觉模型，无法处理截图。请补充视觉模型配置后重启服务。"
+    )
 
     def __init__(
         self,
-        settings: Settings,
+        *,
+        base_url: str,
+        api_key: str,
+        model: str,
+        vision_model: str | None,
+        timeout_seconds: float,
+        max_tokens: int,
+        temperature: float,
+        endpoint_path: str,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
-        self.settings = settings
-        self.model = settings.deepseek_model
-        self.vision_model = settings.deepseek_vision_model
-        # 视觉路径由 image_base64 是否出现决定；该标记用于能力声明。
-        self.supports_images = True
+        self.base_url = base_url.rstrip("/")
+        self.api_key = api_key.strip()
+        self.model = model
+        self.vision_model = vision_model
+        # 顶层截图是否存在决定实际路由；该标记用于能力声明。
+        self.supports_images = bool(vision_model)
+        self.timeout_seconds = timeout_seconds
+        self.max_tokens = max_tokens
+        self.temperature = temperature
+        self._url = f"{self.base_url}{endpoint_path}"
         self._transport = transport
 
+    def _ensure_configured(self) -> None:
+        """子类可覆盖，用于检查 API Key 等必填配置。"""
+        return None
+
+    def _headers(self) -> dict[str, str]:
+        """Ollama 直连无需鉴权；网关场景可通过 OLLAMA_API_KEY 注入。"""
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        return headers
+
     async def generate(self, context: dict[str, Any]) -> GeneratedPrompt:
-        """调用 DeepSeek；错误统一映射为 L3 错误码。"""
-        if not self.settings.deepseek_api_key:
-            raise ApiError(
-                502,
-                "MODEL_UNAVAILABLE",
-                "未配置 DEEPSEEK_API_KEY，无法调用大模型。"
-                "请在根目录 .env 中填写后重启服务。",
-            )
+        """调用上游模型；错误统一映射为 L3 错误码。"""
+        self._ensure_configured()
 
         # 图片是二进制输入，不能混入 JSON 文本上下文，否则会重复传输。
         image_data_url = context.get("imageDataUrl")
+        if image_data_url and not self.vision_model:
+            raise ApiError(
+                502,
+                "MODEL_UNAVAILABLE",
+                self.vision_model_missing_message,
+            )
+
         text_context = {
             key: value for key, value in context.items() if key != "imageDataUrl"
         }
@@ -415,34 +446,31 @@ class DeepSeekPromptGenerator:
         payload = {
             "model": model,
             "messages": messages,
-            "temperature": self.settings.deepseek_temperature,
-            "max_tokens": self.settings.deepseek_max_tokens,
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens,
             "stream": False,
-        }
-        url = f"{self.settings.deepseek_base_url.rstrip('/')}/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {self.settings.deepseek_api_key}",
-            "Content-Type": "application/json",
         }
 
         try:
             async with httpx.AsyncClient(
-                timeout=self.settings.deepseek_timeout_seconds,
+                timeout=self.timeout_seconds,
                 transport=self._transport,
             ) as client:
-                response = await client.post(url, headers=headers, json=payload)
+                response = await client.post(
+                    self._url, headers=self._headers(), json=payload
+                )
         except httpx.TimeoutException as exc:
             raise ApiError(
                 504,
                 "UPSTREAM_TIMEOUT",
-                "DeepSeek 请求超时，请稍后重试。",
+                f"{self.display_name} 请求超时，请稍后重试。",
                 retryable=True,
             ) from exc
         except httpx.RequestError as exc:
             raise ApiError(
                 502,
                 "MODEL_UNAVAILABLE",
-                "无法连接 DeepSeek，请检查本地网络与配置。",
+                f"无法连接 {self.display_name}，{self.connection_hint}",
                 retryable=True,
             ) from exc
 
@@ -450,14 +478,14 @@ class DeepSeekPromptGenerator:
             raise ApiError(
                 429,
                 "RATE_LIMITED",
-                "DeepSeek 请求过于频繁，请稍后重试。",
+                f"{self.display_name} 请求过于频繁，请稍后重试。",
                 retryable=True,
             )
         if response.status_code >= 400:
             raise ApiError(
                 502,
                 "MODEL_UNAVAILABLE",
-                "DeepSeek 返回错误，未生成 Prompt。",
+                f"{self.display_name} 返回错误，未生成 Prompt。",
                 details={"upstreamStatus": response.status_code},
                 retryable=True,
             )
@@ -469,7 +497,7 @@ class DeepSeekPromptGenerator:
             raise ApiError(
                 502,
                 "OUTPUT_INVALID",
-                "DeepSeek 返回结构无法解析。",
+                f"{self.display_name} 返回结构无法解析。",
                 retryable=True,
             ) from exc
 
@@ -477,15 +505,15 @@ class DeepSeekPromptGenerator:
             raise ApiError(
                 502,
                 "OUTPUT_INVALID",
-                "DeepSeek 返回了空内容。",
+                f"{self.display_name} 返回了空内容。",
                 retryable=True,
             )
 
         usage_raw = data.get("usage") or {}
         usage = {
-            "prompt_tokens": int(usage_raw.get("prompt_tokens", 0)),
-            "completion_tokens": int(usage_raw.get("completion_tokens", 0)),
-            "total_tokens": int(usage_raw.get("total_tokens", 0)),
+            "prompt_tokens": int(usage_raw.get("prompt_tokens") or 0),
+            "completion_tokens": int(usage_raw.get("completion_tokens") or 0),
+            "total_tokens": int(usage_raw.get("total_tokens") or 0),
         }
         return GeneratedPrompt(
             content=content,
@@ -495,13 +523,130 @@ class DeepSeekPromptGenerator:
         )
 
 
+class DeepSeekPromptGenerator(_OpenAICompatiblePromptGenerator):
+    """DeepSeek OpenAI 兼容接口调用。
+
+    默认使用 DEEPSEEK_MODEL 处理纯文本；请求携带顶层截图时，
+    切换到 DEEPSEEK_VISION_MODEL（默认 deepseek-flash）并发送图文消息。
+    """
+
+    provider = "deepseek"
+    display_name = "DeepSeek"
+    connection_hint = "请检查本地网络与配置。"
+    vision_model_missing_message = (
+        "未配置 DEEPSEEK_VISION_MODEL，无法处理截图。"
+        "请在根目录 .env 中配置视觉模型后重启服务。"
+    )
+
+    def __init__(
+        self,
+        settings: Settings,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
+        super().__init__(
+            base_url=settings.deepseek_base_url,
+            api_key=settings.deepseek_api_key,
+            model=settings.deepseek_model,
+            vision_model=settings.deepseek_vision_model.strip() or None,
+            timeout_seconds=settings.deepseek_timeout_seconds,
+            max_tokens=settings.deepseek_max_tokens,
+            temperature=settings.deepseek_temperature,
+            endpoint_path="/chat/completions",
+            transport=transport,
+        )
+
+    def _ensure_configured(self) -> None:
+        if not self.api_key:
+            raise ApiError(
+                502,
+                "MODEL_UNAVAILABLE",
+                "未配置 DEEPSEEK_API_KEY，无法调用大模型。"
+                "请在根目录 .env 中填写后重启服务。",
+            )
+
+
+class OllamaPromptGenerator(_OpenAICompatiblePromptGenerator):
+    """Ollama 本地 / 局域网模型调用（OpenAI 兼容接口）。
+
+    OLLAMA_BASE_URL 可填写 ``http://127.0.0.1:11434`` 或带 ``/v1`` 的地址；
+    后者不会被重复拼接。直连默认不需要 API Key。
+    """
+
+    provider = "ollama"
+    display_name = "Ollama"
+    connection_hint = "请确认 ollama serve 已启动，且 OLLAMA_BASE_URL 可访问。"
+    vision_model_missing_message = (
+        "Ollama 未配置 OLLAMA_VISION_MODEL，无法处理截图。"
+        "请在根目录 .env 中配置视觉模型（如 qwen2.5vl:7b）后重启服务。"
+    )
+
+    def __init__(
+        self,
+        settings: Settings,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
+        base_url = settings.ollama_base_url.strip().rstrip("/")
+        endpoint_path = (
+            "/chat/completions" if base_url.endswith("/v1") else "/v1/chat/completions"
+        )
+        super().__init__(
+            base_url=base_url,
+            api_key=settings.ollama_api_key,
+            model=settings.ollama_model,
+            vision_model=settings.ollama_vision_model.strip() or None,
+            timeout_seconds=settings.ollama_timeout_seconds,
+            max_tokens=settings.ollama_max_tokens,
+            temperature=settings.ollama_temperature,
+            endpoint_path=endpoint_path,
+            transport=transport,
+        )
+
+    def _ensure_configured(self) -> None:
+        if not self.model.strip():
+            raise ApiError(
+                502,
+                "MODEL_UNAVAILABLE",
+                "未配置 OLLAMA_MODEL，无法调用本地模型。"
+                "请在根目录 .env 中填写后重启服务。",
+            )
+
+
+class RedactingPromptGenerator:
+    """生成器中间件：在调用上游模型前脱敏上下文。
+
+    包装器只处理文本字段，不触碰截图 Base64 与文件路径；
+    替换数量写入日志，但绝不记录原文或脱敏后的正文。
+    """
+
+    def __init__(self, inner: PromptGenerator) -> None:
+        self.inner = inner
+        self.provider = inner.provider
+        self.model = inner.model
+        self.supports_images = inner.supports_images
+
+    async def generate(self, context: dict[str, Any]) -> GeneratedPrompt:
+        sanitized, count = redact_prompt_context(context)
+        if count:
+            logger.info("prompt_context_redacted replacements=%d", count)
+        return await self.inner.generate(sanitized)
+
+
 def build_prompt_generator(settings: Settings) -> PromptGenerator:
     """根据配置选择生成器；未知值回退到 Mock，避免本地启动失败。"""
-    if settings.prompt_provider.lower() == "deepseek":
-        return DeepSeekPromptGenerator(settings)
-    if settings.prompt_provider.lower() != "mock":
-        logger.warning(
-            "unknown_prompt_provider provider=%s fallback=mock",
-            settings.prompt_provider,
-        )
-    return MockPromptGenerator()
+    provider = settings.llm_provider.strip().lower()
+
+    if provider == "deepseek":
+        generator: PromptGenerator = DeepSeekPromptGenerator(settings)
+    elif provider == "ollama":
+        generator = OllamaPromptGenerator(settings)
+    else:
+        if provider not in {"", "mock"}:
+            logger.warning(
+                "unknown_llm_provider provider=%s fallback=mock",
+                provider,
+            )
+        generator = MockPromptGenerator()
+
+    if settings.redact_sensitive:
+        return RedactingPromptGenerator(generator)
+    return generator

@@ -24,8 +24,13 @@ client = TestClient(app)
 
 
 def _mock_settings() -> Settings:
-    """测试必须固定 Mock，不能读取本机 .env 中的真实 Provider / Key。"""
-    return Settings(prompt_provider="mock", deepseek_api_key="")
+    """测试必须固定 Mock，不能读取本机 .env 中的真实 Provider / Key / 开关。"""
+    return Settings(
+        prompt_provider="mock",
+        deepseek_api_key="",
+        allow_remote_projects=False,
+        redact_sensitive=True,
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -213,6 +218,7 @@ def test_capabilities_declares_limits_and_features() -> None:
     assert features["visualOnlyAnnotations"] is True
     assert features["snapshotFiltersDisplayNone"] is True
     assert features["allowRemoteProjects"] is False
+    assert features["redactionEnabled"] is True
 
 
 def test_capabilities_reports_remote_switch_enabled() -> None:
@@ -248,6 +254,40 @@ def test_capabilities_declares_vision_model_for_deepseek() -> None:
     assert body["features"]["imageInput"] is True
 
 
+def test_capabilities_declares_ollama_model() -> None:
+    """Ollama 模式应声明本地模型与可选的视觉模型。"""
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        llm_provider="ollama",
+        ollama_model="qwen2.5:7b",
+        ollama_vision_model="qwen2.5vl:7b",
+    )
+    try:
+        body = client.get("/api/v1/capabilities").json()
+    finally:
+        app.dependency_overrides[get_settings] = _mock_settings
+
+    assert body["model"] == {
+        "provider": "ollama",
+        "name": "qwen2.5:7b",
+        "visionModel": "qwen2.5vl:7b",
+        "multimodal": True,
+    }
+    assert body["features"]["redactionEnabled"] is True
+
+
+def test_capabilities_reports_redaction_disabled() -> None:
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        llm_provider="mock",
+        redact_sensitive=False,
+    )
+    try:
+        body = client.get("/api/v1/capabilities").json()
+    finally:
+        app.dependency_overrides[get_settings] = _mock_settings
+
+    assert body["features"]["redactionEnabled"] is False
+
+
 # ---------------------------------------------------------------- 成功路径
 
 
@@ -272,6 +312,21 @@ def test_generate_mock_prompt() -> None:
     }
     assert body["usage"] is None
     assert body["warnings"] == []
+
+
+def test_generate_redacts_sensitive_text() -> None:
+    """端到端验证：请求中的邮箱 / 手机号不会出现在返回 Prompt 中。"""
+    payload = _payload()
+    payload["annotations"][0]["intent"] = "联系 alice@example.com 或 13800138000"
+
+    resp = _post(payload, _headers())
+
+    assert resp.status_code == 200, resp.text
+    content = resp.json()["prompt"]["content"]
+    assert "alice@example.com" not in content
+    assert "13800138000" not in content
+    assert "[REDACTED]" in content
+    assert SOURCE in content
 
 
 def test_generate_draw_within_point_limit() -> None:

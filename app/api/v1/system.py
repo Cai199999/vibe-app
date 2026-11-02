@@ -34,25 +34,38 @@ def capabilities(
 ) -> dict[str, Any]:
     """返回模型能力、接口上限与功能开关，供画布启动时对齐。
 
-    顶层 image_base64 始终会被接受：DeepSeek 走真实多模态模型，
-    Mock 走本地视觉 Mock。`model.multimodal` 只表示是否具备真实识图能力。
+    顶层 image_base64 始终会被接受：DeepSeek / 配置了视觉模型的 Ollama
+    走真实多模态路径，Mock 走本地视觉 Mock。`model.multimodal` 只表示
+    是否具备真实识图能力。
     """
-    provider = settings.prompt_provider.lower()
-    multimodal = provider == "deepseek"
+    provider = settings.llm_provider.strip().lower()
+    if provider == "deepseek":
+        model_info = {
+            "provider": "deepseek",
+            "name": settings.deepseek_model,
+            "visionModel": settings.deepseek_vision_model or None,
+            "multimodal": bool(settings.deepseek_vision_model),
+        }
+    elif provider == "ollama":
+        vision_model = settings.ollama_vision_model.strip() or None
+        model_info = {
+            "provider": "ollama",
+            "name": settings.ollama_model,
+            "visionModel": vision_model,
+            "multimodal": vision_model is not None,
+        }
+    else:
+        model_info = {
+            "provider": "mock",
+            "name": "mock-prompt-v1",
+            "visionModel": None,
+            "multimodal": False,
+        }
 
     return {
         "apiVersion": API_VERSION,
         "protocolVersion": PROTOCOL_VERSION,
-        "model": {
-            "provider": "deepseek" if provider == "deepseek" else "mock",
-            "name": (
-                settings.deepseek_model if provider == "deepseek" else "mock-prompt-v1"
-            ),
-            "visionModel": (
-                settings.deepseek_vision_model if provider == "deepseek" else None
-            ),
-            "multimodal": multimodal,
-        },
+        "model": model_info,
         "limits": {
             "maxSnapshotElements": settings.max_snapshot_elements,
             "maxTextLength": settings.max_text_length,
@@ -80,5 +93,7 @@ def capabilities(
             "snapshotFiltersDisplayNone": True,
             # 远程项目开关由根目录 .env 控制，前端据此显示安全警告。
             "allowRemoteProjects": settings.allow_remote_projects,
+            # 发送给模型前的文本脱敏是否开启。
+            "redactionEnabled": settings.redact_sensitive,
         },
     }

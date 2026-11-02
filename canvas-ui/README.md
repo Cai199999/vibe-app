@@ -242,6 +242,10 @@ canvas-ui/
 - 真实 `.env` 不入库；前端日志不打印标注正文或 Prompt 内容。
 - SDK 仅在 dev server 注入，生产构建不包含 `data-source`、片段注册表或 SDK。
 - 远程项目默认关闭；开启后只允许 http(s) + 合法 Host，危险端口始终拦截。远程页面的 DOM 数据与源码片段会发送给模型，UI 会显示红色警告，请只加载可信项目。
+- 后端默认在发送前脱敏：邮箱、手机号、AK/SK、Authorization、JWT 等文本替换为 `[REDACTED]`；
+  文件路径与图片 Base64 保留。可通过根目录 `.env` 的 `REDACT_SENSITIVE=false` 关闭（不建议）。
+- 可通过根目录 `.env` 的 `LLM_PROVIDER=ollama` 接入本地 / 局域网 Ollama，完全不连外网；
+  视觉模式需额外配置 `OLLAMA_VISION_MODEL`。
 
 ## 验证
 

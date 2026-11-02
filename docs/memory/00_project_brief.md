@@ -167,6 +167,8 @@ flowchart LR
 - 截图只允许用户手动上传 / 粘贴，不自动截屏；多模态不是硬依赖。
 - MVP 只支持 Vite + React，纯本地部署。
 - MVP 不依赖数据库；历史只写 `localStorage`，可被用户清空。
+- 发送模型前默认执行文本脱敏；截图内容无法正则脱敏。
+- 模型提供方可为 DeepSeek 或本地 / 局域网 Ollama；Ollama 不要求外网。
 
 ## 9. 风险与待确认事项
 
@@ -186,6 +188,7 @@ flowchart LR
 | R10 | 片段注册表缺失或过期 | 无法满足 Q14；`SNIPPET_REQUIRED` 阻断 |
 | R11 | 原始轨迹点位过多 | 请求体过大、渲染卡顿；前端限 5000，提交前降采样到 ≤100 或 bbox |
 | R12 | 用户上传图片过大或含敏感信息 | 请求失败或隐私风险；需大小限制与明示 |
+| R13 | 正则脱敏存在漏网与误伤 | 截图内文字、变形 Token 无法识别；正常长串可能被替换为 `[REDACTED]` |
 
 ### 9.2 仍需在 API 设计中定稿的工程细节
 
@@ -215,11 +218,12 @@ flowchart LR
 - [x] 阶段七：仅视觉模式截图上传 / 粘贴、Canvas 红笔合成、`image_base64` 多模态路由（2026-11-02）
 - [x] 阶段七：红圈包围盒并集外扩 20% 自动裁剪、大图 JPEG 0.8 / ≤1 MB 兜底、视觉 Prompt 强化（2026-11-02）
 - [x] 阶段八：远程项目加载开关 `ALLOW_REMOTE_PROJECTS`、前后端 Origin / 危险端口校验、远程安全警告（2026-11-02）
+- [x] 阶段九：发送前敏感信息脱敏 `REDACT_SENSITIVE`、Ollama 本地 / 局域网模型接入 `LLM_PROVIDER=ollama`（2026-11-02）
 - [x] 阶段四：真实 DeepSeek 多模态联调（`deepseek-flash` 识别红圈搜索框，2026-11-02）
 - [ ] 阶段四：更多页面类型的 Prompt 质量评估
 - [ ] 阶段四：`localStorage` 历史、失效标注重定位
 
-> 当前业务代码包含 `app/`（FastAPI L3）、`canvas-ui/`（React 画布）、`vibe-plugin/`（Vite 插件 + SDK）与 `examples/vite-demo/`（验证项目）。画布加载项目后 3 秒内探测 SDK：成功为源码模式，失败自动降级为仅视觉模式；源码模式支持旁注/圈画/拖拽与 L3 联调；仅视觉模式需上传 / 粘贴截图，前端把截图与红色手绘轨迹合成后以 `image_base64` 提交：有红圈时只发送包围盒并集外扩 20% 的局部图，无红圈发送全图，大图自动使用 JPEG 0.8 并保证 ≤ 1 MB，后端切换到 `deepseek-flash`。项目加载默认仅限本机回环地址；根目录 `.env` 的 `ALLOW_REMOTE_PROJECTS=true` 可开启局域网 / 远程加载，前后端都会校验 http(s) Host 并拦截基础设施端口，当前仍只支持 Vite + React。交互模式下的 iframe 内输入事件仍由用户页面接管，这是浏览器跨域 iframe 的固有限制。
+> 当前业务代码包含 `app/`（FastAPI L3）、`canvas-ui/`（React 画布）、`vibe-plugin/`（Vite 插件 + SDK）与 `examples/vite-demo/`（验证项目）。画布加载项目后 3 秒内探测 SDK：成功为源码模式，失败自动降级为仅视觉模式；源码模式支持旁注/圈画/拖拽与 L3 联调；仅视觉模式需上传 / 粘贴截图，前端把截图与红色手绘轨迹合成后以 `image_base64` 提交：有红圈时只发送包围盒并集外扩 20% 的局部图，无红圈发送全图，大图自动使用 JPEG 0.8 并保证 ≤ 1 MB，后端切换到 `deepseek-flash`。项目加载默认仅限本机回环地址；根目录 `.env` 的 `ALLOW_REMOTE_PROJECTS=true` 可开启局域网 / 远程加载，前后端都会校验 http(s) Host 并拦截基础设施端口，当前仍只支持 Vite + React。发送模型前默认执行文本脱敏（`REDACT_SENSITIVE=true`），邮箱、手机号、AK/SK、Authorization、JWT 等替换为 `[REDACTED]`，文件路径与图片 Base64 保留；模型可通过 `LLM_PROVIDER=deepseek|ollama` 切换，Ollama 支持本地 / 局域网地址，视觉模式需配置 `OLLAMA_VISION_MODEL`。交互模式下的 iframe 内输入事件仍由用户页面接管，这是浏览器跨域 iframe 的固有限制。
 
 ## 11. 约定
 

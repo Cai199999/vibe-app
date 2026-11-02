@@ -30,6 +30,33 @@ cp .env.example .env   # 按需修改连接串与密钥
 `ALLOW_REMOTE_PROJECTS=true` 并重启 FastAPI；仅支持 Vite + React，危险端口始终拦截。
 详见 [`canvas-ui/README.md`](canvas-ui/README.md#远程项目加载可选)。
 
+## 模型与隐私
+
+`LLM_PROVIDER` 支持 `mock` / `deepseek` / `ollama`；旧变量 `PROMPT_PROVIDER` 仍兼容，
+两者同时存在时 `LLM_PROVIDER` 优先。
+
+```env
+# DeepSeek
+LLM_PROVIDER=deepseek
+DEEPSEEK_API_KEY=sk-...
+DEEPSEEK_MODEL=deepseek-chat
+
+# 本地 / 局域网 Ollama（无需外网）
+LLM_PROVIDER=ollama
+OLLAMA_BASE_URL=http://127.0.0.1:11434
+OLLAMA_MODEL=qwen2.5:7b
+# 需要识别截图时填写；留空则拒绝视觉请求
+OLLAMA_VISION_MODEL=qwen2.5vl:7b
+
+# 发送给模型前脱敏，默认开启
+REDACT_SENSITIVE=true
+```
+
+启动前先拉取模型：`ollama pull qwen2.5:7b`（视觉模型同理）。修改 `.env` 后重启 FastAPI，
+访问 <http://127.0.0.1:8000/api/v1/capabilities> 可确认当前 provider 与视觉模型。
+脱敏会在文本与 JSX 发送给模型前替换邮箱、手机号、AK/SK、Authorization、JWT 等为
+`[REDACTED]`；文件路径与图片 Base64 保持不变，截图像素内容无法脱敏。
+
 ## 测试与格式化
 
 ```bash
