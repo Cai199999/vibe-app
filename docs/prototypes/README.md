@@ -2,6 +2,8 @@
 
 文件：`stage-2-canvas.html`（单文件，HTML + Tailwind CDN + 原生 JS）
 
+> 2026-11-02 更新：本原型只用于验证“画布 + 标注 + Prompt 结果”的交互模型。最终架构已改为“跨域 iframe + SDK + Vite 插件 + 后端 Prompt 服务”，不再使用同源 `srcdoc`、直接读取 `contentDocument` 或模拟刷新。最终设计见 [`../design/01.功能模块梳理.md`](../design/01.功能模块梳理.md) 与 [`../design/02.整体架构设计.md`](../design/02.整体架构设计.md)。
+
 ## 如何打开
 
 推荐用静态服务器打开，避免 `file://` 下 iframe 同源限制：
@@ -42,11 +44,11 @@ python3 -m http.server 8080
 
 ## 明确模拟的部分
 
-- 演示页面是 **纯 HTML 的 mock Dashboard**，不是真实 React 项目；正式阶段会在同源 iframe 中加载工具内创建的 React dev server。
+- 演示页面是 **纯 HTML 的 mock Dashboard**，不是真实 React 项目；最终架构使用用户自有 Vite React 项目 + 跨域 iframe + SDK。
 - Agent 的 4 步流程和第 3 步 DeepSeek 都是 **定时模拟**，没有网络请求、没有 API Key。
 - **「模拟执行并刷新」不会执行生成的 Prompt**，只做固定演示变更：按钮文案/主色、指标卡间距/圆角/描边、图表描边、表格高亮。
-- 按已确认的 **P4-B** 边界：vibe-app 输出修改指令，由 Claude Code / Cursor 等外部工具执行；vibe-app 本身不直接写业务代码。
-- 演示页中的 `data-source` 是手工标记，正式方案（构建插件 / 运行时包装 / 脚手架模板）待阶段三确认。
+- 按 Q1 / Q2 的最终边界：系统只输出 Markdown Prompt，由用户复制到 Cursor 等外部工具执行；系统不修改代码、不生成 Diff、不控制刷新。
+- 演示页中的 `data-source` 是手工标记；最终方案由 **Vite 插件**在开发环境注入，见架构设计。
 
 ## 已知限制
 
@@ -55,9 +57,9 @@ python3 -m http.server 8080
 - 没有持久化、多项目、登录、协作、截图理解、触摸双指缩放。
 - 没有真实调用 DeepSeek，也没有真实执行代码修改。
 
-## 待负责人确认
+## 与最终架构的关系
 
-1. **R1（阻塞阶段三）**：P3 说“后台 Agent 分析后再修改”，P4-B 说“只生成指令、外部工具执行”。本地 Agent 的边界到底是哪一种？
-2. 数据库继续使用同步 SQLAlchemy，还是切换异步？
-3. 提交给 Agent 的「上传」是否只包含标注 JSON，还是也要画布截图 / 手绘图片（影响 MinIO 与多模态输入）？
-4. 本原型的交互模型是否通过评审？通过后再进入阶段三：架构 / 数据库 / API 设计。
+1. 本原型只验证交互模型，不代表最终的同源 / 跨域、刷新、Agent 边界。
+2. Q1–Q5 已明确：只生成 Prompt、不修改代码、跨域 iframe + SDK、Vite 插件注入 `data-source`、用户手动复制并由 HMR 刷新。
+3. 最终模块与架构分别见 `../design/01.功能模块梳理.md` 和 `../design/02.整体架构设计.md`。
+4. 阶段三设计仍在评审；评审通过前不进入接口细化和编码。

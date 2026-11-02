@@ -45,3 +45,10 @@ python3 -m http.server 8080
 
 原型仅模拟 Agent 流程，不调用 DeepSeek、不写业务代码。说明与限制见
 [`docs/prototypes/README.md`](docs/prototypes/README.md)。
+
+## 阶段三设计
+
+- [功能模块梳理](docs/design/01.功能模块梳理.md)
+- [整体架构设计](docs/design/02.整体架构设计.md)
+
+设计文档为待审核草案；未开始接口细化或业务编码。
