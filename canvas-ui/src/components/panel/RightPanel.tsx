@@ -3,6 +3,7 @@ import { useState } from 'react'
 import type { ToastTone } from '../../hooks/useToast'
 import type { PromptErrorState } from '../../hooks/usePromptGeneration'
 import { PROMPT_API_BASE } from '../../lib/constants'
+import { VISUAL_GENERATE_BLOCKED_MESSAGE } from '../../lib/messages'
 import type { CanvasAnnotation, PromptResponse } from '../../types/vibe'
 import { Icon } from '../ui/Icon'
 import { AnnotationList } from './AnnotationList'
@@ -14,6 +15,8 @@ interface RightPanelProps {
   collapsed: boolean
   annotations: CanvasAnnotation[]
   selectedId: string | null
+  /** true 时不允许生成 Prompt，只保留本地视觉标注。 */
+  visualMode: boolean
   loading: boolean
   error: PromptErrorState | null
   response: PromptResponse | null
@@ -28,6 +31,7 @@ export function RightPanel({
   collapsed,
   annotations,
   selectedId,
+  visualMode,
   loading,
   error,
   response,
@@ -40,6 +44,12 @@ export function RightPanel({
   const [tab, setTab] = useState<Tab>('annotations')
 
   const handleGenerate = () => {
+    // 仅视觉模式的提示优先于“没有标注”，确保用户能理解降级原因。
+    if (visualMode) {
+      setTab('prompt')
+      showToast(VISUAL_GENERATE_BLOCKED_MESSAGE, 'error')
+      return
+    }
     if (annotations.length === 0) {
       setTab('annotations')
       showToast('请先在预览上添加至少一条标注。', 'info')
@@ -124,6 +134,7 @@ export function RightPanel({
           <AnnotationList
             annotations={annotations}
             selectedId={selectedId}
+            visualMode={visualMode}
             onSelect={onSelect}
             onRemove={onRemove}
             onClear={onClear}

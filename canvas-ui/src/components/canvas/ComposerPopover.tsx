@@ -13,7 +13,7 @@ const TYPE_META = {
 function defaultIntent(draft: ComposerDraft): string {
   if (draft.type === 'draw') return '修改圈选区域'
   if (draft.type === 'drag') {
-    return `将 ${draft.target.component ?? '元素'} 移动到目标位置`
+    return `将 ${draft.target?.component ?? '元素'} 移动到目标位置`
   }
   return ''
 }
@@ -22,10 +22,16 @@ function targetLabel(draft: ComposerDraft): string {
   if (draft.type === 'draw') {
     const count = draft.visual?.relatedTargets.length ?? 0
     const size = draft.visual?.bbox
+    if (draft.visualOnly) {
+      return size
+        ? `视觉圈画 · ${Math.round(size.width)}×${Math.round(size.height)}`
+        : '视觉圈画'
+    }
     return size
       ? `${count} 个元素 · ${Math.round(size.width)}×${Math.round(size.height)}`
       : `${count} 个元素`
   }
+  if (!draft.target) return '未绑定源码'
   return `${draft.target.component ?? 'Element'} · ${draft.target.source}`
 }
 
@@ -104,7 +110,11 @@ export function ComposerPopover({
 
       <div className="mt-2 flex items-center justify-between gap-2">
         <span className="text-[9px] text-slate-600">
-          {noteRequired ? '旁注内容必填 · ' : '可选补充意图 · '}
+          {draft.visualOnly
+            ? '仅视觉标注 · 不可生成 Prompt · '
+            : noteRequired
+              ? '旁注内容必填 · '
+              : '可选补充意图 · '}
           ⌘/Ctrl + Enter 保存
         </span>
         <div className="flex items-center gap-1.5">

@@ -26,16 +26,20 @@ const STATUS_META: Record<
     text: 'text-slate-400',
   },
   connecting: {
-    label: '连接中',
+    label: '探测中',
     dot: 'bg-amber-400',
     text: 'text-amber-300',
   },
   connected: {
-    label: '已连接',
+    label: '已连接源码模式',
     dot: 'bg-emerald-400',
     text: 'text-emerald-300',
   },
-  error: { label: '连接异常', dot: 'bg-rose-400', text: 'text-rose-300' },
+  visual: {
+    label: '仅视觉模式',
+    dot: 'bg-amber-400',
+    text: 'text-amber-300',
+  },
 }
 
 interface TopBarProps {
@@ -114,18 +118,20 @@ export function TopBar({
         </div>
       </div>
 
-      <div className="flex w-[300px] shrink-0 items-center justify-end gap-2">
+      <div className="flex w-[340px] shrink-0 items-center justify-end gap-2">
         <span
           data-testid="bridge-status"
-          className={`hidden items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 font-mono text-[9px] xl:inline-flex ${status.text}`}
+          className={`hidden items-center gap-1.5 whitespace-nowrap rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 font-mono text-[9px] xl:inline-flex ${status.text}`}
           title={
             bridgeStatus === 'connected'
               ? elementCount === null
                 ? '握手成功，正在同步快照'
                 : `已同步 ${elementCount} 个 data-source 节点`
-              : bridgeStatus === 'idle'
-                ? '尚未加载本地项目'
-                : '等待项目内 Vite SDK 握手'
+              : bridgeStatus === 'visual'
+                ? '未检测到源码插件：可圈画，不能生成 Prompt'
+                : bridgeStatus === 'idle'
+                  ? '尚未加载本地项目'
+                  : '正在探测项目内的 Vibe SDK（3 秒）'
           }
         >
           <span className={`h-1.5 w-1.5 rounded-full ${status.dot}`} />
@@ -137,7 +143,7 @@ export function TopBar({
           )}
         </span>
 
-        <span className="hidden max-w-[150px] items-center gap-1.5 truncate rounded-full border border-indigo-400/20 bg-indigo-400/10 px-2.5 py-1 text-[9px] font-medium text-indigo-200 md:inline-flex">
+        <span className="hidden max-w-[120px] items-center gap-1.5 truncate rounded-full border border-indigo-400/20 bg-indigo-400/10 px-2.5 py-1 text-[9px] font-medium text-indigo-200 md:inline-flex">
           {projectName ?? '未加载项目'}
         </span>
 

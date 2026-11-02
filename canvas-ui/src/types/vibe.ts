@@ -120,7 +120,7 @@ export interface SnippetResult {
   error?: BridgeError
 }
 
-export type BridgeStatus = 'idle' | 'connecting' | 'connected' | 'error'
+export type BridgeStatus = 'idle' | 'connecting' | 'connected' | 'visual'
 
 /** 当前加载到画布中的本地项目。 */
 export interface LocalProject {
@@ -157,34 +157,52 @@ interface AnnotationBase {
   id: string
   intent: string
   createdAt: string
+}
+
+/** 源码模式标注：必须带 data-source 与可提交的 JSX 片段。 */
+interface SourceAnnotationBase extends AnnotationBase {
   target: WorldTarget
   snippet: JSXSnippet
 }
 
-export interface NoteAnnotation extends AnnotationBase {
+export interface NoteAnnotation extends SourceAnnotationBase {
   type: 'note'
 }
 
-export interface DrawAnnotation extends AnnotationBase {
+export interface DrawAnnotation extends SourceAnnotationBase {
   type: 'draw'
   visual: DrawVisual
 }
 
-export interface DragAnnotation extends AnnotationBase {
+export interface DragAnnotation extends SourceAnnotationBase {
   type: 'drag'
   drag: DragVisual
 }
 
-export type CanvasAnnotation =
+/**
+ * 仅视觉模式下的圈画：没有 data-source / JSX 片段，
+ * 只保存在本地，用于视觉标记，不能进入 Prompt 提交。
+ */
+export interface VisualDrawAnnotation extends AnnotationBase {
+  type: 'visual-draw'
+  visual: DrawVisual
+}
+
+export type SourceAnnotation =
   | NoteAnnotation
   | DrawAnnotation
   | DragAnnotation
 
+export type CanvasAnnotation = SourceAnnotation | VisualDrawAnnotation
+
 /** 浮层草稿：确认意图后才转成正式标注。 */
 export interface ComposerDraft {
   type: AnnotationType
-  target: WorldTarget
-  snippet: JSXSnippet
+  /** 仅视觉圈画没有 target / snippet。 */
+  target?: WorldTarget
+  snippet?: JSXSnippet
+  /** true 表示本次草稿来自无源码的仅视觉模式。 */
+  visualOnly?: boolean
   anchorRect: Rect
   screen: { left: number; top: number }
   visual?: DrawVisual

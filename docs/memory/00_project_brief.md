@@ -207,10 +207,11 @@ flowchart LR
 - [x] 阶段四：前端 → `/api/v1/prompts/generate` 联调、Markdown 渲染、复制（2026-11-02）
 - [x] 阶段五：真实 Vite 插件、`data-source` 注入、SDK 协议接入（2026-11-02）
 - [x] 阶段五：滚轮反向/中键平移/工作区锁定/可折叠工作台/真实项目加载（2026-11-02）
+- [x] 阶段六：3 秒源码模式自动探测、仅视觉降级、视觉圈画与生成硬拦截（2026-11-02）
 - [ ] 阶段四：真实 DeepSeek Provider 联调与 Prompt 质量评估
 - [ ] 阶段四：`localStorage` 历史、失效标注重定位、截图上传
 
-> 当前业务代码包含 `app/`（FastAPI L3）、`canvas-ui/`（React 画布）、`vibe-plugin/`（Vite 插件 + SDK）与 `examples/vite-demo/`（验证项目）。画布已能加载真实 Vite 项目并完成握手、快照、旁注与 L3 联调；交互模式下的 iframe 内输入事件仍由用户页面接管，这是浏览器跨域 iframe 的固有限制。
+> 当前业务代码包含 `app/`（FastAPI L3）、`canvas-ui/`（React 画布）、`vibe-plugin/`（Vite 插件 + SDK）与 `examples/vite-demo/`（验证项目）。画布加载项目后 3 秒内探测 SDK：成功为源码模式，失败自动降级为仅视觉模式；源码模式支持旁注/圈画/拖拽与 L3 联调，仅视觉模式只允许本地圈画并拦截 Prompt 生成。交互模式下的 iframe 内输入事件仍由用户页面接管，这是浏览器跨域 iframe 的固有限制。
 
 ## 11. 约定
 

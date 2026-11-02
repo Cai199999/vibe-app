@@ -9,6 +9,7 @@ import {
   PROTOCOL_VERSION,
 } from '../lib/constants'
 import { createMessageId, createSessionToken } from '../lib/ids'
+import { VISUAL_MODE_STATUS_MESSAGE } from '../lib/messages'
 import type {
   BridgeError,
   BridgeStatus,
@@ -53,7 +54,12 @@ export interface IframeBridge {
   sourceSnippet: (source: string) => Promise<SnippetResult>
 }
 
-const HANDSHAKE_TIMEOUT_MS = 10000
+/** 源码模式探测窗口：超时后自动降级为仅视觉模式。 */
+const HANDSHAKE_TIMEOUT_MS = 3000
+
+const VISUAL_FALLBACK_DETAIL =
+  `${VISUAL_MODE_STATUS_MESSAGE}` +
+  '点击元素不可用，可使用圈画；生成 Prompt 需启用 @vibe/vite-plugin。'
 
 function protocolMajor(version: unknown): string {
   return typeof version === 'string' ? version.split('.')[0] : ''
@@ -90,6 +96,17 @@ export function useIframeBridge(
   const sessionRef = useRef(sessionToken)
   const readyRef = useRef(false)
   const pendingRef = useRef(new Map<string, PendingRequest>())
+  const handshakeTimerRef = useRef<number | null>(null)
+  const helloSucceededRef = useRef(false)
+  const snapshotReadyRef = useRef(false)
+  /** 本次项目加载是否已经降级；降级后不再接受迟到的握手。 */
+  const fallbackRef = useRef(false)
+
+  const clearHandshakeTimer = useCallback(() => {
+    if (handshakeTimerRef.current === null) return
+    window.clearTimeout(handshakeTimerRef.current)
+    handshakeTimerRef.current = null
+  }, [])
 
   const [status, setStatus] = useState<BridgeStatus>(
     previewOrigin ? 'connecting' : 'idle',
@@ -150,9 +167,13 @@ export function useIframeBridge(
     [postRaw],
   )
 
-  // 项目切换：轮换会话、重置 UI 状态，并启动握手超时提示。
+  // 项目切换：轮换会话、重置探测状态，并启动 3 秒源码模式探测。
   useEffect(() => {
     readyRef.current = false
+    helloSucceededRef.current = false
+    snapshotReadyRef.current = false
+    fallbackRef.current = false
+    clearHandshakeTimer()
     rejectPending(pendingRef.current, '预览项目已切换，原请求已取消')
 
     const nextToken = createSessionToken()
@@ -167,15 +188,28 @@ export function useIframeBridge(
     if (!previewOrigin) return
 
     const timer = window.setTimeout(() => {
-      if (readyRef.current) return
-      setStatus('error')
-      setLastError(
-        '10 秒内未收到 SDK HELLO：请确认项目使用 Vite、已启用 @vibe/vite-plugin，并检查地址与端口。',
+      // 只有 HELLO 与首个有效 SNAPSHOT 都到齐，才算源码模式。
+      if (helloSucceededRef.current && snapshotReadyRef.current) return
+
+      fallbackRef.current = true
+      readyRef.current = false
+      rejectPending(
+        pendingRef.current,
+        '已切换为仅视觉模式，等待中的源码请求已取消',
       )
+      setStatus('visual')
+      setLastError(VISUAL_FALLBACK_DETAIL)
     }, HANDSHAKE_TIMEOUT_MS)
 
-    return () => window.clearTimeout(timer)
-  }, [previewOrigin, projectKey])
+    handshakeTimerRef.current = timer
+
+    return () => {
+      window.clearTimeout(timer)
+      if (handshakeTimerRef.current === timer) {
+        handshakeTimerRef.current = null
+      }
+    }
+  }, [clearHandshakeTimer, previewOrigin, projectKey])
 
   useEffect(() => {
     if (!previewOrigin) return
@@ -192,16 +226,19 @@ export function useIframeBridge(
       }
 
       if (protocolMajor(data.protocolVersion) !== PROTOCOL_MAJOR) {
+        fallbackRef.current = true
         readyRef.current = false
-        setStatus('error')
-        setLastError('SDK 协议主版本不兼容，请升级 @vibe/vite-plugin。')
+        clearHandshakeTimer()
+        setStatus('visual')
+        setLastError('SDK 协议主版本不兼容，已切换为仅视觉模式；请升级 @vibe/vite-plugin。')
         return
       }
 
       if (data.type === 'HELLO') {
-        rejectPending(pendingRef.current, '预览页面重新握手，原请求已取消')
+        // 降级后不再接受迟到的握手，避免界面在视觉/源码模式间反复跳变。
+        if (fallbackRef.current) return
+        helloSucceededRef.current = true
         readyRef.current = true
-        setStatus('connected')
         setLastError(null)
 
         postRaw({
@@ -221,8 +258,17 @@ export function useIframeBridge(
       if (data.sessionToken !== sessionRef.current) return
 
       if (data.type === 'SNAPSHOT') {
+        if (fallbackRef.current) return
         if (Array.isArray(data.elements) && data.meta) {
+          snapshotReadyRef.current = true
           setSnapshot(data as unknown as VibeSnapshot)
+
+          // HELLO + SNAPSHOT 都到齐，才允许标注与生成进入源码模式。
+          if (helloSucceededRef.current) {
+            clearHandshakeTimer()
+            setStatus('connected')
+            setLastError(null)
+          }
         }
         return
       }
@@ -252,22 +298,26 @@ export function useIframeBridge(
       rejectPending(pending, '画布已卸载')
       readyRef.current = false
     }
-  }, [previewOrigin, postRaw])
+  }, [clearHandshakeTimer, previewOrigin, postRaw])
 
-  // 15 秒心跳；连续失败时标记断线，由用户切换/重新加载项目恢复。
+  // 15 秒心跳；连续失败时自动降级为仅视觉模式，重新加载项目可恢复。
   useEffect(() => {
     if (!previewOrigin) return
     const timer = window.setInterval(() => {
       if (!readyRef.current) return
       request('PING', {}, 1500).catch(() => {
         readyRef.current = false
-        setStatus('error')
-        setLastError('iframe 心跳超时，请重新加载项目或检查 dev server。')
+        fallbackRef.current = true
+        clearHandshakeTimer()
+        setStatus('visual')
+        setLastError(
+          'iframe 心跳超时，已切换为仅视觉模式；请重新加载项目或检查 dev server。',
+        )
       })
     }, 15000)
 
     return () => window.clearInterval(timer)
-  }, [previewOrigin, request])
+  }, [clearHandshakeTimer, previewOrigin, request])
 
   const hitTest = useCallback(
     async (

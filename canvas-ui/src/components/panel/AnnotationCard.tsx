@@ -23,6 +23,12 @@ const TYPE_META: Record<
     badge: 'bg-emerald-400/12 text-emerald-300',
     stripe: 'bg-emerald-400',
   },
+  'visual-draw': {
+    label: '视觉圈画',
+    icon: 'draw',
+    badge: 'bg-amber-400/12 text-amber-300',
+    stripe: 'bg-amber-400',
+  },
 }
 
 function formatTime(iso: string): string {
@@ -35,6 +41,11 @@ function formatTime(iso: string): string {
 }
 
 function annotationMeta(annotation: CanvasAnnotation): string {
+  if (annotation.type === 'visual-draw') {
+    return `仅视觉 · ${Math.round(
+      annotation.visual.bbox.width,
+    )}×${Math.round(annotation.visual.bbox.height)}`
+  }
   if (annotation.type === 'draw') {
     const count = annotation.visual.relatedSources.length
     return `${count} 个关联元素 · ${Math.round(
@@ -68,9 +79,11 @@ export function AnnotationCard({
 }: AnnotationCardProps) {
   const meta = TYPE_META[annotation.type]
   const snippetLines =
-    annotation.snippet.endLine >= annotation.snippet.startLine
-      ? `${annotation.snippet.startLine}–${annotation.snippet.endLine} 行`
-      : '片段'
+    annotation.type === 'visual-draw'
+      ? null
+      : annotation.snippet.endLine >= annotation.snippet.startLine
+        ? `${annotation.snippet.startLine}–${annotation.snippet.endLine} 行`
+        : '片段'
 
   return (
     <article
@@ -124,25 +137,33 @@ export function AnnotationCard({
           {annotation.intent || '（未填写修改意图）'}
         </p>
 
-        <div className="mt-2 flex min-w-0 items-center gap-1.5">
-          <Icon
-            name="file"
-            size={10}
-            className="shrink-0 text-slate-600"
-          />
-          <span className="truncate font-mono text-[9px] text-slate-500">
-            {annotation.target.source}
-          </span>
-        </div>
+        {annotation.type !== 'visual-draw' && (
+          <div className="mt-2 flex min-w-0 items-center gap-1.5">
+            <Icon
+              name="file"
+              size={10}
+              className="shrink-0 text-slate-600"
+            />
+            <span className="truncate font-mono text-[9px] text-slate-500">
+              {annotation.target.source}
+            </span>
+          </div>
+        )}
 
         <div className="mt-1.5 flex items-center justify-between gap-2">
           <span className="truncate text-[9px] text-slate-600">
             {annotationMeta(annotation)}
           </span>
-          <span className="shrink-0 rounded bg-white/[0.04] px-1.5 py-0.5 font-mono text-[8px] text-slate-500">
-            JSX {snippetLines}
-            {annotation.snippet.truncated ? ' · 截断' : ''}
-          </span>
+          {annotation.type !== 'visual-draw' ? (
+            <span className="shrink-0 rounded bg-white/[0.04] px-1.5 py-0.5 font-mono text-[8px] text-slate-500">
+              JSX {snippetLines}
+              {annotation.snippet.truncated ? ' · 截断' : ''}
+            </span>
+          ) : (
+            <span className="shrink-0 rounded bg-amber-400/[0.08] px-1.5 py-0.5 font-mono text-[8px] text-amber-300/80">
+              无源码
+            </span>
+          )}
         </div>
       </div>
     </article>

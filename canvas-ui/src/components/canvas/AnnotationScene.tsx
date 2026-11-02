@@ -7,6 +7,7 @@ import type {
   DragAnnotation,
   Point,
   Rect,
+  VisualDrawAnnotation,
 } from '../../types/vibe'
 
 interface AnnotationSceneProps {
@@ -70,7 +71,7 @@ function DrawShape({
   annotation,
   selected,
 }: {
-  annotation: DrawAnnotation
+  annotation: DrawAnnotation | VisualDrawAnnotation
   selected: boolean
 }) {
   const displayPoints = useMemo(
@@ -180,7 +181,10 @@ export function AnnotationScene({
             />
           )
         }
-        if (annotation.type === 'draw') {
+        if (
+          annotation.type === 'draw' ||
+          annotation.type === 'visual-draw'
+        ) {
           return (
             <g key={annotation.id}>
               <DrawShape annotation={annotation} selected={selected} />

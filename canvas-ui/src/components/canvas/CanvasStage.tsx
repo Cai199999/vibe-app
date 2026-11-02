@@ -24,6 +24,7 @@ import {
   worldToScreen,
 } from '../../lib/geometry'
 import { createAnnotationId } from '../../lib/ids'
+import { VISUAL_NO_SOURCE_MESSAGE } from '../../lib/messages'
 import { toWorldTarget } from '../../lib/targets'
 import type {
   BridgeTarget,
@@ -250,7 +251,8 @@ export function CanvasStage({
       const rect =
         annotation.type === 'note'
           ? annotation.target.rect
-          : annotation.type === 'draw'
+          : annotation.type === 'draw' ||
+              annotation.type === 'visual-draw'
             ? annotation.visual.bbox
             : annotation.drag.toRect
       const canvasRect = element.getBoundingClientRect()
@@ -340,8 +342,12 @@ export function CanvasStage({
   const beginNote = useCallback(
     async (clientX: number, clientY: number) => {
       if (composerRef.current) return
+      if (bridge.status === 'visual') {
+        showToast(VISUAL_NO_SOURCE_MESSAGE, 'error')
+        return
+      }
       if (bridge.status !== 'connected') {
-        showToast('预览尚未连接，请稍候或刷新页面。', 'error')
+        showToast('正在探测源码插件，请稍候；3 秒后会给出结果。', 'info')
         return
       }
       const world = screenPointToWorld(clientX, clientY)
@@ -388,8 +394,12 @@ export function CanvasStage({
   const beginDrag = useCallback(
     async (clientX: number, clientY: number) => {
       if (composerRef.current) return
+      if (bridge.status === 'visual') {
+        showToast(VISUAL_NO_SOURCE_MESSAGE, 'error')
+        return
+      }
       if (bridge.status !== 'connected') {
-        showToast('预览尚未连接，请稍候或刷新页面。', 'error')
+        showToast('正在探测源码插件，请稍候；3 秒后会给出结果。', 'info')
         return
       }
       const world = screenPointToWorld(clientX, clientY)
@@ -441,8 +451,30 @@ export function CanvasStage({
         clearLive()
         return
       }
+
+      // 仅视觉模式没有 data-source：仍允许本地圈画，但不做元素解析。
+      // 这类标注只保存在画布内存中，生成 Prompt 会被前端硬拦截。
+      if (bridge.status === 'visual') {
+        const visual = {
+          rawPoints: points.slice(0, MAX_RAW_POINTS),
+          bbox: roundRect(bbox),
+          relatedSources: [],
+          relatedTargets: [],
+          spatialSummary: `仅视觉模式手绘区域，包围盒 ${Math.round(
+            bbox.width,
+          )}×${Math.round(bbox.height)} 像素；未解析源码元素。`,
+        }
+        openComposer({
+          type: 'draw',
+          visualOnly: true,
+          anchorRect: expandRect(bbox, 8),
+          visual,
+        })
+        return
+      }
+
       if (bridge.status !== 'connected') {
-        showToast('预览尚未连接，请稍候再试。', 'error')
+        showToast('正在探测源码插件，请稍候；3 秒后会给出结果。', 'info')
         clearLive()
         return
       }
@@ -731,6 +763,8 @@ export function CanvasStage({
       const createdAt = new Date().toISOString()
 
       if (draft.type === 'note') {
+        // 旁注必须有源码目标，否则不允许落库。
+        if (!draft.target || !draft.snippet) return
         onAdd({
           id: createAnnotationId(),
           type: 'note',
@@ -740,16 +774,28 @@ export function CanvasStage({
           snippet: draft.snippet,
         })
       } else if (draft.type === 'draw' && draft.visual) {
-        onAdd({
-          id: createAnnotationId(),
-          type: 'draw',
-          intent,
-          createdAt,
-          target: draft.target,
-          snippet: draft.snippet,
-          visual: draft.visual,
-        })
+        if (draft.visualOnly || !draft.target || !draft.snippet) {
+          // 仅视觉圈画：只保存在本地，不能进入 Prompt 提交批次。
+          onAdd({
+            id: createAnnotationId(),
+            type: 'visual-draw',
+            intent,
+            createdAt,
+            visual: draft.visual,
+          })
+        } else {
+          onAdd({
+            id: createAnnotationId(),
+            type: 'draw',
+            intent,
+            createdAt,
+            target: draft.target,
+            snippet: draft.snippet,
+            visual: draft.visual,
+          })
+        }
       } else if (draft.type === 'drag' && draft.drag) {
+        if (!draft.target || !draft.snippet) return
         onAdd({
           id: createAnnotationId(),
           type: 'drag',
@@ -968,7 +1014,9 @@ export function CanvasStage({
             <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" />
             <span>{MODE_LABEL[mode]}</span>
             <span className="hidden text-slate-600 sm:inline">
-              {MODE_HINT[mode]}
+              {bridge.status === 'visual'
+                ? '仅视觉模式：点击元素不可用；按 P 圈画，生成 Prompt 需启用 Vite 插件。'
+                : MODE_HINT[mode]}
             </span>
           </div>
 
@@ -998,8 +1046,11 @@ export function CanvasStage({
         />
       )}
 
-      {bridge.status === 'error' && bridge.lastError && (
-        <div className="pointer-events-none absolute right-4 top-4 z-40 flex items-center gap-2 rounded-lg border border-rose-400/25 bg-rose-950/70 px-3 py-1.5 text-[10px] text-rose-200 backdrop-blur">
+      {bridge.status === 'visual' && bridge.lastError && (
+        <div
+          data-testid="visual-mode-banner"
+          className="pointer-events-none absolute right-4 top-4 z-40 flex max-w-[360px] items-center gap-2 rounded-lg border border-amber-400/25 bg-amber-950/70 px-3 py-1.5 text-[10px] leading-relaxed text-amber-200 backdrop-blur"
+        >
           <Icon name="alert" size={12} />
           {bridge.lastError}
         </div>

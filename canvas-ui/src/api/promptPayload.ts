@@ -6,6 +6,7 @@ import {
 } from '../lib/constants'
 import { downsamplePoints, round, roundPoint, roundRect } from '../lib/geometry'
 import { createRequestId } from '../lib/ids'
+import { VISUAL_GENERATE_BLOCKED_MESSAGE } from '../lib/messages'
 import type {
   ApiAnnotation,
   ApiTarget,
@@ -15,6 +16,7 @@ import type {
   LocalProject,
   Neighbor,
   PromptGenerateRequest,
+  SourceAnnotation,
   WorldTarget,
 } from '../types/vibe'
 
@@ -76,9 +78,7 @@ function dragPayload(annotation: DragAnnotation) {
   }
 }
 
-export function toApiAnnotation(
-  annotation: CanvasAnnotation,
-): ApiAnnotation {
+export function toApiAnnotation(annotation: SourceAnnotation): ApiAnnotation {
   const base: ApiAnnotation = {
     annotationId: annotation.id,
     type: annotation.type,
@@ -105,6 +105,14 @@ export function buildPromptRequest(
   if (annotations.length === 0) {
     throw new Error('至少需要一条标注才能生成 Prompt')
   }
+  const sourceAnnotations = annotations.filter(
+    (annotation): annotation is SourceAnnotation =>
+      annotation.type !== 'visual-draw',
+  )
+  if (sourceAnnotations.length !== annotations.length) {
+    // 视觉标注没有 data-source，必须在进入 L3 前硬拦截。
+    throw new Error(VISUAL_GENERATE_BLOCKED_MESSAGE)
+  }
 
   return {
     requestId: createRequestId(),
@@ -115,7 +123,7 @@ export function buildPromptRequest(
       previewOrigin: project.origin,
     },
     locale: 'zh-CN',
-    annotations: annotations.map(toApiAnnotation),
+    annotations: sourceAnnotations.map(toApiAnnotation),
     options: {
       outputLanguage: 'zh-CN',
       maxPromptChars: MAX_PROMPT_CHARS,

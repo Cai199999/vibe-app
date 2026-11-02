@@ -9,6 +9,7 @@ import { useAnnotations } from './hooks/useAnnotations'
 import { useIframeBridge } from './hooks/useIframeBridge'
 import { usePromptGeneration } from './hooks/usePromptGeneration'
 import { useToast } from './hooks/useToast'
+import { VISUAL_GENERATE_BLOCKED_MESSAGE } from './lib/messages'
 import type { LocalProject, Mode } from './types/vibe'
 
 function App() {
@@ -39,6 +40,11 @@ function App() {
     resetPrompt()
   }, [annotations, resetPrompt])
 
+  // 降级后旧 Prompt 不再可信，立即清空。
+  useEffect(() => {
+    if (bridge.status === 'visual') resetPrompt()
+  }, [bridge.status, resetPrompt])
+
   const handleLoadProject = useCallback(
     (next: LocalProject) => {
       setProject(next)
@@ -62,6 +68,14 @@ function App() {
       show('请先加载本地项目。', 'info')
       return
     }
+    if (bridge.status === 'visual') {
+      show(VISUAL_GENERATE_BLOCKED_MESSAGE, 'error')
+      return
+    }
+    if (bridge.status !== 'connected') {
+      show('正在探测源码插件，请稍候；3 秒后会给出结果。', 'info')
+      return
+    }
     if (annotations.length === 0) {
       show('请先在预览上添加至少一条标注。', 'info')
       return
@@ -80,6 +94,7 @@ function App() {
   }, [
     annotations,
     bridge.sessionToken,
+    bridge.status,
     generate,
     project,
     show,
@@ -122,6 +137,7 @@ function App() {
           collapsed={!panelOpen}
           annotations={annotations}
           selectedId={selectedId}
+          visualMode={bridge.status === 'visual'}
           loading={prompt.loading}
           error={prompt.error}
           response={prompt.response}

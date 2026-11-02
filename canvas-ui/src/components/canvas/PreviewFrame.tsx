@@ -19,9 +19,9 @@ interface PreviewFrameProps {
 
 function statusLabel(status: BridgeStatus, revision: number | null): string {
   if (status === 'connected') return `snapshot r${revision ?? 0}`
-  if (status === 'error') return 'bridge error'
+  if (status === 'visual') return 'visual only'
   if (status === 'idle') return 'idle'
-  return 'connecting'
+  return 'probing SDK'
 }
 
 export function PreviewFrame({
@@ -55,9 +55,7 @@ export function PreviewFrame({
           className={`shrink-0 rounded-md px-1.5 py-0.5 font-mono text-[9px] ${
             status === 'connected'
               ? 'bg-emerald-400/10 text-emerald-300'
-              : status === 'error'
-                ? 'bg-rose-400/10 text-rose-300'
-                : 'bg-amber-400/10 text-amber-300'
+              : 'bg-amber-400/10 text-amber-300'
           }`}
         >
           {statusLabel(status, revision)}
