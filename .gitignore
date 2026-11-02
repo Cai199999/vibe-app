@@ -1,0 +1,27 @@
+# ---- Python ----
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---- 环境变量 / 密钥 ----
+.env
+.env.local
+*.pem
+
+# ---- 本地数据 ----
+*.db
+*.sqlite3
+*.log
+logs/
+
+# ---- IDE / 系统 ----
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# 注意：docs/memory/ 必须保留并提交到 Git
