@@ -179,8 +179,12 @@ async def _handle_validation_error(
 
 
 async def _handle_unexpected_error(request: Request, exc: Exception) -> JSONResponse:
-    """兜底异常：只记录异常类型，不记录请求内容。"""
-    logger.exception(
+    """兜底异常：只记录异常类型与路径。
+
+    不使用 ``logger.exception``：异常参数 / traceback 可能包含请求正文、
+    Prompt 或上游响应片段，生产日志只保留可安全枚举的字段。
+    """
+    logger.error(
         "unhandled_error type=%s path=%s",
         type(exc).__name__,
         request.url.path,

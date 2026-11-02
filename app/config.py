@@ -78,6 +78,8 @@ class Settings(BaseSettings):
     ollama_timeout_seconds: float = 120.0
     ollama_max_tokens: int = 2000
     ollama_temperature: float = 0.2
+    # 本地小模型上下文有限，JSX 片段超过该字符数时截断并加提示。
+    ollama_max_snippet_chars: int = 2000
     # 直连 Ollama 通常为空；经反向代理 / 网关时按需填写。
     ollama_api_key: str = ""
 

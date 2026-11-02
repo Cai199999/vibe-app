@@ -474,6 +474,89 @@ def test_ollama_gateway_api_key_adds_bearer_header() -> None:
     assert captured["headers"]["authorization"] == "Bearer gateway-key"
 
 
+def _captured_context(captured: dict[str, Any]) -> dict[str, Any]:
+    """从请求 payload 中还原 <vibe_context> 内的结构化上下文。"""
+    user_content = captured["payload"]["messages"][1]["content"]
+    text = user_content if isinstance(user_content, str) else user_content[0]["text"]
+    raw = text.split("<vibe_context>\n", 1)[1].rsplit("\n</vibe_context>", 1)[0]
+    return json.loads(raw)
+
+
+def test_ollama_truncates_long_jsx_snippet() -> None:
+    """本地模型上下文保护：超长 JSX 截断并显式标记。"""
+    captured: dict[str, Any] = {}
+    generator = OllamaPromptGenerator(
+        _ollama_settings(ollama_max_snippet_chars=200),
+        transport=httpx.MockTransport(_ollama_handler(captured)),
+    )
+    context = build_prompt_context(_request(), include_image=False)
+    long_content = '<div className="panel">' + ("x" * 1000) + "</div>"
+    context["annotations"][0]["jsxSnippet"]["content"] = long_content
+
+    asyncio.run(generator.generate(context))
+
+    snippet = _captured_context(captured)["annotations"][0]["jsxSnippet"]
+    assert snippet["truncated"] is True
+    assert snippet["content"].endswith("[代码过长已截断]")
+    assert len(snippet["content"]) == 200
+    assert long_content not in json.dumps(
+        _captured_context(captured), ensure_ascii=False
+    )
+    # 截断只作用于本次请求，不能修改调用方传入的上下文。
+    assert context["annotations"][0]["jsxSnippet"]["content"] == long_content
+
+
+def test_ollama_keeps_short_jsx_snippet_untouched() -> None:
+    captured: dict[str, Any] = {}
+    generator = OllamaPromptGenerator(
+        _ollama_settings(),
+        transport=httpx.MockTransport(_ollama_handler(captured)),
+    )
+    context = build_prompt_context(_request(), include_image=False)
+    original = context["annotations"][0]["jsxSnippet"]["content"]
+
+    asyncio.run(generator.generate(context))
+
+    snippet = _captured_context(captured)["annotations"][0]["jsxSnippet"]
+    assert snippet["content"] == original
+    assert snippet["truncated"] is False
+    assert "[代码过长已截断]" not in snippet["content"]
+
+
+def test_ollama_system_prompt_forbids_chatter_and_markdown_fence() -> None:
+    captured: dict[str, Any] = {}
+    generator = OllamaPromptGenerator(
+        _ollama_settings(),
+        transport=httpx.MockTransport(_ollama_handler(captured)),
+    )
+
+    asyncio.run(
+        generator.generate(build_prompt_context(_request(), include_image=False))
+    )
+
+    system_prompt = captured["payload"]["messages"][0]["content"]
+    assert "请直接输出最终的 Markdown 内容" in system_prompt
+    assert "不要说任何寒暄语" in system_prompt
+    assert "不要使用 ```markdown 包裹全文" in system_prompt
+    assert "直接输出纯文本即可" in system_prompt
+
+
+def test_deepseek_prompt_has_no_ollama_suffix() -> None:
+    """Ollama 的输出约束不能被 DeepSeek 分支继承。"""
+    captured: dict[str, Any] = {}
+    generator = DeepSeekPromptGenerator(
+        Settings(prompt_provider="deepseek", deepseek_api_key="test-key"),
+        transport=httpx.MockTransport(_ollama_handler(captured)),
+    )
+
+    asyncio.run(
+        generator.generate(build_prompt_context(_request(), include_image=False))
+    )
+
+    system_prompt = captured["payload"]["messages"][0]["content"]
+    assert "不要说任何寒暄语" not in system_prompt
+
+
 def test_build_prompt_generator_selects_ollama() -> None:
     generator = build_prompt_generator(_ollama_settings())
 

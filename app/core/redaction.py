@@ -44,6 +44,9 @@ _SECRET_ASSIGNMENT = re.compile(
     r"(?P=quote)"
 )
 
+# URL 内嵌凭据：只替换密码，保留协议、用户名与主机，便于定位问题。
+_URL_CREDENTIALS = re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://)([^/\s:@]+):([^/\s@]+)@")
+
 # 常见云厂商 / SaaS 固定前缀 Token。
 _JWT = re.compile(
     r"(?<![A-Za-z0-9_-])"
@@ -86,6 +89,12 @@ _LONG_TOKEN = re.compile(
     r"(?![A-Za-z0-9_-])"
 )
 
+# 标准 UUID 与常见摘要不做长串脱敏，避免误杀 ID / 哈希。
+_UUID_TOKEN = re.compile(
+    r"(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+)
+_HEX_DIGEST = re.compile(r"(?i)^(?:[0-9a-f]{32}|[0-9a-f]{40})$")
+
 # 值可以是字符串或 re.Match -> str 的替换函数。
 _Replacement = str | Callable[[re.Match[str]], str]
 
@@ -101,11 +110,38 @@ def _replace_assignment(match: re.Match[str]) -> str:
     return f"{match.group('prefix')}{quote}{REDACTED}{quote}"
 
 
+def _replace_url_credentials(match: re.Match[str]) -> str:
+    """只替换 URL 中的密码，保留用户名与主机。"""
+    return f"{match.group(1)}{match.group(2)}:{REDACTED}@"
+
+
+def _redact_long_tokens(text: str) -> tuple[str, int]:
+    """长串兜底规则；UUID / MD5 / SHA1 白名单原样保留且不计入替换数。"""
+    pieces: list[str] = []
+    last_end = 0
+    count = 0
+    for match in _LONG_TOKEN.finditer(text):
+        value = match.group(0)
+        if _UUID_TOKEN.fullmatch(value) or _HEX_DIGEST.fullmatch(value):
+            continue
+        pieces.append(text[last_end : match.start()])
+        pieces.append(REDACTED)
+        last_end = match.end()
+        count += 1
+
+    if count == 0:
+        return text, 0
+    pieces.append(text[last_end:])
+    return "".join(pieces), count
+
+
 # 顺序重要：先处理私钥块、请求头与键值对，再处理独立 Token / 联系方式。
+# 长串兜底单独执行，以便白名单命中时不计数。
 _RULES: tuple[tuple[re.Pattern[str], _Replacement], ...] = (
     (_PRIVATE_KEY, REDACTED),
     (_AUTH_HEADER, _replace_auth),
     (_SECRET_ASSIGNMENT, _replace_assignment),
+    (_URL_CREDENTIALS, _replace_url_credentials),
     (_JWT, REDACTED),
     (_OPENAI_KEY, REDACTED),
     (_AWS_ACCESS_KEY, REDACTED),
@@ -114,7 +150,6 @@ _RULES: tuple[tuple[re.Pattern[str], _Replacement], ...] = (
     (_GOOGLE_API_KEY, REDACTED),
     (_EMAIL, REDACTED),
     (_CN_MOBILE, REDACTED),
-    (_LONG_TOKEN, REDACTED),
 )
 
 # 这些字段承载定位 / 传输语义，必须原样保留：
@@ -144,7 +179,8 @@ def redact_text(text: str) -> tuple[str, int]:
     for pattern, replacement in _RULES:
         text, count = pattern.subn(replacement, text)
         total += count
-    return text, total
+    text, count = _redact_long_tokens(text)
+    return text, total + count
 
 
 def _walk(value: Any, key: str | None) -> tuple[Any, int]:

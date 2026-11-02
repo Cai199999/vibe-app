@@ -24,7 +24,10 @@ import {
   worldToScreen,
 } from '../../lib/geometry'
 import { createAnnotationId } from '../../lib/ids'
-import { VISUAL_NO_SOURCE_MESSAGE } from '../../lib/messages'
+import {
+  VISUAL_NO_SOURCE_MESSAGE,
+  VISUAL_PRIVACY_WARNING,
+} from '../../lib/messages'
 import { toWorldTarget } from '../../lib/targets'
 import type {
   BridgeTarget,
@@ -1039,6 +1042,15 @@ export function CanvasStage({
                 : MODE_HINT[mode]}
             </span>
           </div>
+
+          {bridge.status === 'visual' && (
+            <div
+              data-testid="visual-privacy-warning"
+              className="pointer-events-none absolute left-4 top-[52px] z-40 max-w-[420px] rounded-lg border border-amber-400/15 bg-[#0c0f15]/85 px-3 py-1.5 text-[9px] leading-relaxed text-amber-200/75 backdrop-blur"
+            >
+              {VISUAL_PRIVACY_WARNING}
+            </div>
+          )}
 
           <div className="pointer-events-none absolute bottom-5 left-1/2 z-30 hidden -translate-x-1/2 items-center gap-3 rounded-full border border-white/[0.07] bg-[#0c0f15]/75 px-3 py-1.5 text-[10px] text-slate-500 backdrop-blur md:flex">
             <span>中键拖拽 / 空格 + 拖动 平移</span>

@@ -14,3 +14,7 @@ export const VISUAL_IMAGE_INVALID_MESSAGE =
 
 export const VISUAL_MODE_STATUS_MESSAGE =
   '3 秒内未检测到 Vibe SDK，已切换为仅视觉模式。'
+
+/** 视觉模式常驻隐私提示：图片内容无法由后端正则脱敏。 */
+export const VISUAL_PRIVACY_WARNING =
+  '🔒 提示：请确保截图中不包含明文密码、Token 等敏感信息，云端模型无法为您对图片内容脱敏。'

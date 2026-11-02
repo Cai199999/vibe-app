@@ -60,6 +60,7 @@ OLLAMA_MODEL=qwen2.5:7b
 # 留空表示不支持截图
 OLLAMA_VISION_MODEL=qwen2.5vl:7b
 OLLAMA_TIMEOUT_SECONDS=120
+OLLAMA_MAX_SNIPPET_CHARS=2000
 OLLAMA_API_KEY=
 ```
 
@@ -92,21 +93,45 @@ PY
 
 ## 测试结果
 
-- 后端：`pytest` **93 项通过**，新增覆盖：
+- 后端：`pytest` **101 项通过**，新增覆盖：
   - 邮箱、手机号、Authorization、键值对、JWT、私钥、云厂商 Token、长串；
+  - URL 内嵌密码只脱敏密码，普通 URL 不受影响；
+  - UUID / MD5 / SHA1 白名单保留且不计入替换数；
   - 普通 JSX 不误伤、`source` / `imageDataUrl` 保留、幂等；
   - 服务链路与 HTTP API 均确认敏感文本不进入 Prompt；
   - `REDACT_SENSITIVE=false` 时保留原文；
   - Ollama 地址拼接、无鉴权、网关 Bearer、文本 / 视觉模型路由；
+  - Ollama 超长 JSX 截断、短片段不变、调用方上下文不被修改；
+  - Ollama System Prompt 寒暄 / 代码围栏约束，DeepSeek 不继承；
+  - 异常处理日志不含异常消息、手机号、邮箱或 traceback；
   - 未配置视觉模型或模型名时返回 `MODEL_UNAVAILABLE`；
   - `LLM_PROVIDER` 优先于 `PROMPT_PROVIDER`；
   - `/capabilities` 正确声明 Ollama 与 `redactionEnabled`。
 - 所有 Ollama 测试使用 `httpx.MockTransport`，不依赖真实 Ollama，也不访问外网。
+- 前端：`npm run build` 与 `npm run lint` 通过。
+
+## 发布前加固（2026-11-02）
+
+- 脱敏白名单：标准 UUID（含连字符）与 32 位 MD5 / 40 位 SHA1 全十六进制摘要
+  不再被长串规则误杀，且不计入替换数；其他 32–128 位可疑长串仍替换为 `[REDACTED]`。
+- URL 内嵌凭据：新增 `协议://用户名:密码@域名` 规则，只替换密码，
+  保留协议、用户名与主机，普通 URL 不受影响。
+- Ollama 上下文保护：请求前把单个 `jsxSnippet.content` 截断到
+  `OLLAMA_MAX_SNIPPET_CHARS`（默认 2000），末尾追加 `[代码过长已截断]`，
+  并标记 `truncated=true`；截断基于发送副本，不修改调用方对象。
+- Ollama 输出约束：System Prompt 追加“直接输出最终 Markdown、不寒暄、
+  不使用整段 ```markdown 围栏、直接输出纯文本”的硬指令；DeepSeek 不继承该后缀。
+- 日志安全：全局异常处理器只记录异常类型与请求路径，不使用 `logger.exception`，
+  不记录异常消息、traceback、`request.body` 或原始 Prompt。
+- 前端视觉隐私提示：画布视觉模式与标注弹窗常驻显示
+  “🔒 提示：请确保截图中不包含明文密码、Token 等敏感信息，云端模型无法为您对图片内容脱敏。”
 
 ## 已知限制
 
 - 脱敏是正则启发式：变形 / 拼接 / 编码后的密钥、截图内文字无法识别；
-  正常长串也可能被误替换为 `[REDACTED]`。
+  UUID / MD5 / SHA1 以外的普通长串仍可能被替换为 `[REDACTED]`。
+- Ollama 截断会让模型只看到片段前 2000 字符（含截断标记），
+  超长组件的后半部分需由执行端读取真实文件补全。
 - Ollama 模型能力差异较大；本地小模型的 Prompt 质量、JSON 上下文理解与视觉能力
   需按实际模型评估。
 - 视觉模式必须显式配置 `OLLAMA_VISION_MODEL`，否则后端硬阻断，不会静默降级。

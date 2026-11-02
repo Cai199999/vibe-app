@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any
+
+import pytest
 
 from app.core.redaction import REDACTED, redact_prompt_context, redact_text
 from app.services.prompt_generator import GeneratedPrompt, RedactingPromptGenerator
@@ -67,6 +70,44 @@ def test_keeps_normal_jsx_unchanged() -> None:
 
     assert redacted == text
     assert count == 0
+
+
+def test_redacts_url_embedded_credentials_only() -> None:
+    """URL 内嵌凭据只替换密码，保留用户名、主机与普通 URL。"""
+    text = (
+        "生产库 postgresql://admin:s3cr3t-pass@db.internal:5432/app；"
+        "普通地址 https://registry.example.com/path 不能被误伤。"
+    )
+
+    redacted, count = redact_text(text)
+
+    assert "s3cr3t-pass" not in redacted
+    assert "postgresql://admin:[REDACTED]@db.internal:5432/app" in redacted
+    assert "https://registry.example.com/path" in redacted
+    assert count == 1
+
+
+def test_keeps_uuid_and_hex_digests() -> None:
+    """标准 UUID / MD5 / SHA1 走白名单，长串 Token 仍然脱敏。"""
+    uuid = "550e8400-e29b-41d4-a716-446655440000"
+    md5 = "d41d8cd98f00b204e9800998ecf8427e"
+    sha1 = "da39a3ee5e6b4b0d3255bfef95601890afd80709"
+    opaque_token = "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0"
+
+    redacted, count = redact_text(f"{uuid}\n{md5}\n{sha1}\n{opaque_token}")
+
+    assert uuid in redacted
+    assert md5 in redacted
+    assert sha1 in redacted
+    assert opaque_token not in redacted
+    assert count == 1
+    # 白名单规则不能污染上下文中的普通 ID 字段。
+    sanitized, context_count = redact_prompt_context(
+        {"annotations": [{"annotationId": uuid, "intent": f"引用哈希 {sha1}"}]}
+    )
+    assert sanitized["annotations"][0]["annotationId"] == uuid
+    assert sha1 in sanitized["annotations"][0]["intent"]
+    assert context_count == 0
 
 
 def test_redacts_context_but_keeps_source_and_image() -> None:
@@ -153,3 +194,22 @@ def test_redacting_generator_wraps_context() -> None:
     assert inner.context["annotations"][0]["source"] == "src/App.tsx:1:1"
     assert generator.provider == "fake"
     assert generator.supports_images is False
+
+
+def test_redacting_generator_logs_count_not_content(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """日志只允许出现替换数量，不能出现原文或脱敏后的正文。"""
+    inner = _CaptureGenerator()
+    generator = RedactingPromptGenerator(inner)
+
+    with caplog.at_level(logging.INFO):
+        asyncio.run(
+            generator.generate(
+                {"annotations": [{"intent": "联系 alice@example.com 或 13800138000"}]}
+            )
+        )
+
+    assert "prompt_context_redacted replacements=2" in caplog.text
+    assert "alice@example.com" not in caplog.text
+    assert "13800138000" not in caplog.text

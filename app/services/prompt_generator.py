@@ -364,6 +364,8 @@ class _OpenAICompatiblePromptGenerator:
     vision_model_missing_message = (
         "当前模型未配置视觉模型，无法处理截图。请补充视觉模型配置后重启服务。"
     )
+    # 子类可追加输出约束；Ollama 用它抑制寒暄与整段 Markdown 包裹。
+    system_prompt_suffix = ""
 
     def __init__(
         self,
@@ -437,6 +439,8 @@ class _OpenAICompatiblePromptGenerator:
         else:
             user_content = user_text
             system_prompt = _SYSTEM_PROMPT
+
+        system_prompt = f"{system_prompt}{self.system_prompt_suffix}"
 
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": system_prompt},
@@ -579,6 +583,13 @@ class OllamaPromptGenerator(_OpenAICompatiblePromptGenerator):
         "Ollama 未配置 OLLAMA_VISION_MODEL，无法处理截图。"
         "请在根目录 .env 中配置视觉模型（如 qwen2.5vl:7b）后重启服务。"
     )
+    # 本地小模型容易输出寒暄或整段 Markdown 包裹，追加硬约束。
+    system_prompt_suffix = (
+        "\n\n请直接输出最终的 Markdown 内容，不要说任何寒暄语"
+        "（如“好的”、“这是您的指令”），不要使用 ```markdown 包裹全文，"
+        "直接输出纯文本即可。"
+    )
+    snippet_truncation_marker = "[代码过长已截断]"
 
     def __init__(
         self,
@@ -600,6 +611,7 @@ class OllamaPromptGenerator(_OpenAICompatiblePromptGenerator):
             endpoint_path=endpoint_path,
             transport=transport,
         )
+        self.max_snippet_chars = settings.ollama_max_snippet_chars
 
     def _ensure_configured(self) -> None:
         if not self.model.strip():
@@ -609,6 +621,40 @@ class OllamaPromptGenerator(_OpenAICompatiblePromptGenerator):
                 "未配置 OLLAMA_MODEL，无法调用本地模型。"
                 "请在根目录 .env 中填写后重启服务。",
             )
+
+    def _truncate_jsx_snippets(self, context: dict[str, Any]) -> dict[str, Any]:
+        """限制本地模型的 JSX 上下文长度，返回新上下文，不修改调用方对象。"""
+        limit = self.max_snippet_chars
+        annotations = context.get("annotations")
+        if limit <= 0 or not isinstance(annotations, list):
+            return context
+
+        truncated_annotations: list[Any] = []
+        for annotation in annotations:
+            if not isinstance(annotation, dict):
+                truncated_annotations.append(annotation)
+                continue
+            snippet = annotation.get("jsxSnippet")
+            content = snippet.get("content") if isinstance(snippet, dict) else None
+            if not isinstance(content, str) or len(content) <= limit:
+                truncated_annotations.append(annotation)
+                continue
+
+            marker = self.snippet_truncation_marker
+            new_snippet = dict(snippet)
+            new_snippet["content"] = content[: max(0, limit - len(marker))] + marker
+            new_snippet["truncated"] = True
+            new_annotation = dict(annotation)
+            new_annotation["jsxSnippet"] = new_snippet
+            truncated_annotations.append(new_annotation)
+
+        sanitized_context = dict(context)
+        sanitized_context["annotations"] = truncated_annotations
+        return sanitized_context
+
+    async def generate(self, context: dict[str, Any]) -> GeneratedPrompt:
+        """发起请求前先裁剪 JSX，防止本地小模型上下文爆炸。"""
+        return await super().generate(self._truncate_jsx_snippets(context))
 
 
 class RedactingPromptGenerator:

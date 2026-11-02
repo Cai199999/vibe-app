@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 
+import { VISUAL_PRIVACY_WARNING } from '../../lib/messages'
 import { Icon } from '../ui/Icon'
 import type { ComposerDraft } from '../../types/vibe'
 
@@ -107,6 +108,15 @@ export function ComposerPopover({
         placeholder="描述你希望怎么改…"
         className="mt-2.5 w-full resize-none rounded-lg border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] leading-relaxed text-slate-200 outline-none placeholder:text-slate-600 focus:border-indigo-400/50"
       />
+
+      {draft.visualOnly && (
+        <p
+          data-testid="composer-visual-privacy-warning"
+          className="mt-2 rounded-md border border-amber-400/15 bg-amber-400/[0.06] px-2 py-1.5 text-[9px] leading-relaxed text-amber-200/80"
+        >
+          {VISUAL_PRIVACY_WARNING}
+        </p>
+      )}
 
       <div className="mt-2 flex items-center justify-between gap-2">
         <span className="text-[9px] text-slate-600">

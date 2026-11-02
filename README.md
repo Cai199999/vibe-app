@@ -54,8 +54,13 @@ REDACT_SENSITIVE=true
 
 启动前先拉取模型：`ollama pull qwen2.5:7b`（视觉模型同理）。修改 `.env` 后重启 FastAPI，
 访问 <http://127.0.0.1:8000/api/v1/capabilities> 可确认当前 provider 与视觉模型。
-脱敏会在文本与 JSX 发送给模型前替换邮箱、手机号、AK/SK、Authorization、JWT 等为
-`[REDACTED]`；文件路径与图片 Base64 保持不变，截图像素内容无法脱敏。
+脱敏会在文本与 JSX 发送给模型前替换邮箱、手机号、AK/SK、Authorization、
+URL 内嵌密码、JWT 等为 `[REDACTED]`；标准 UUID 与 MD5 / SHA1 十六进制摘要豁免，
+文件路径与图片 Base64 保持不变。截图像素内容无法脱敏，视觉模式界面会常驻提示。
+
+Ollama 模式会在请求前把单个 `jsxSnippet` 截断到 `OLLAMA_MAX_SNIPPET_CHARS`
+（默认 2000 字符）并追加 `[代码过长已截断]`；System Prompt 额外要求直接输出
+Markdown，禁止寒暄语与整段 ```markdown 围栏。
 
 ## 测试与格式化
 
