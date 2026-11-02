@@ -1,6 +1,6 @@
 # vibe-app 项目简报
 
-> 最后更新：2026-11-02（Q1–Q18 最终决策 + 阶段三文档同步）
+> 最后更新：2026-11-02（阶段四：L3 后端 + React 画布联调）
 
 ## 1. 项目名称与目标
 
@@ -121,20 +121,20 @@ flowchart LR
 - 自动截屏、跨域 iframe 像素读取、后台抓屏。
 - 数据库持久化、服务端历史、MinIO / 对象存储落盘。
 - 手绘轨迹的平滑 / 降噪 / 曲线拟合。
-- 数据库表结构与详细 API 契约（见 `03.API接口设计.md`，尚未开始编码）。
+- 数据库表结构；L3 API 契约见 `03.API接口设计.md`，后端已实现。
 
 ## 6. 技术栈与基础设施
 
 | 层 | 技术 | 状态 |
 |---|---|---|
-| 后端 | Python 3.14 + FastAPI + Uvicorn | 骨架已就绪；将承载 Prompt 服务 |
+| 后端 | Python 3.14 + FastAPI + Uvicorn + Pydantic 2 | L3 Prompt API 已实现，Mock Provider 默认 |
 | ORM / 数据库 | SQLAlchemy 2.0 + MySQL 8.0 | 已有骨架；MVP 不作为依赖 |
 | 缓存 | Redis | 已有 Docker；MVP 不依赖 |
 | 对象存储 | MinIO | 已有 Docker；MVP 不落盘图片 |
-| 画布工具 | 独立 Web 应用（技术栈待定） | 阶段二原型已验证交互 |
+| 画布工具 | Vite 8 + React 19 + TypeScript + TailwindCSS 4 | `canvas-ui/` 已实现画布、标注、L3 联调 |
 | 用户项目 | Vite + React + 自动注入 SDK + Vite 插件 | 待实现 |
-| 预览桥接 | 跨域 iframe + `postMessage` | 待实现 |
-| 大模型 | DeepSeek API | 未接入 |
+| 预览桥接 | 跨域 iframe + `postMessage` | 前端桥接已实现；当前接 Mock iframe |
+| 大模型 | DeepSeek API | 可选接入；当前 Mock Markdown |
 | 配置 | pydantic-settings + `.env` | 已就绪 |
 
 > 中间件复用 `~/Workspace/infra` 中的常驻 Docker 实例；MVP 不要求启动 MySQL / Redis / MinIO。
@@ -202,11 +202,14 @@ flowchart LR
 - [x] 阶段三：`docs/design/02.整体架构设计.md` v2.2（2026-11-02）
 - [x] 阶段三：`docs/design/03.API接口设计.md` v1（2026-11-02）
 - [x] 阶段三：01 / 02 / 03 设计评审与接口决策（2026-11-02）
-- [ ] 阶段四：L3 Prompt 后端服务（进行中）
-- [ ] 阶段四：L1 / L2 / L4 前端与插件
-- [ ] 阶段四：端到端联调
+- [x] 阶段四：L3 Prompt 后端服务、硬校验、Mock / DeepSeek Provider、pytest（2026-11-02）
+- [x] 阶段四：React 画布 `canvas-ui/`、无限画布、旁注 / 圈画 / 拖拽、Mock iframe 桥接（2026-11-02）
+- [x] 阶段四：前端 → `/api/v1/prompts/generate` 联调、Markdown 渲染、复制（2026-11-02）
+- [ ] 阶段四：真实 Vite 插件、`data-source` 注入、SDK 协议接入
+- [ ] 阶段四：真实 DeepSeek Provider 联调与 Prompt 质量评估
+- [ ] 阶段四：`localStorage` 历史、失效标注重定位、截图上传
 
-> 当前没有任何业务代码；`app/` 仍为初始骨架。阶段二原型的同源 `srcdoc`、模拟执行与刷新仅用于交互验证，不代表最终架构。
+> 当前业务代码包含 `app/`（FastAPI L3）与 `canvas-ui/`（React 画布）；预览仍为 Mock iframe，真实 Vite 插件与 SDK 注入尚未实现。浏览器端到端已验证旁注 / 圈画 / 拖拽 → CORS 请求 → Markdown 展示。
 
 ## 11. 约定
 

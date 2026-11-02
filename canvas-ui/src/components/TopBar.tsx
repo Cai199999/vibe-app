@@ -1,0 +1,150 @@
+import { Icon, type IconName } from './ui/Icon'
+import type { BridgeStatus, Mode } from '../types/vibe'
+
+interface ModeOption {
+  mode: Mode
+  label: string
+  shortcut: string
+  icon: IconName
+}
+
+const MODES: ModeOption[] = [
+  { mode: 'interact', label: '交互', shortcut: 'V', icon: 'cursor' },
+  { mode: 'hand', label: '抓手', shortcut: 'H', icon: 'hand' },
+  { mode: 'note', label: '旁注', shortcut: 'N', icon: 'note' },
+  { mode: 'draw', label: '圈画', shortcut: 'P', icon: 'draw' },
+  { mode: 'drag', label: '拖拽', shortcut: 'D', icon: 'drag' },
+]
+
+const STATUS_META: Record<
+  BridgeStatus,
+  { label: string; dot: string; text: string }
+> = {
+  connecting: {
+    label: '连接中',
+    dot: 'bg-amber-400',
+    text: 'text-amber-300',
+  },
+  connected: {
+    label: '已连接',
+    dot: 'bg-emerald-400',
+    text: 'text-emerald-300',
+  },
+  error: { label: '连接异常', dot: 'bg-rose-400', text: 'text-rose-300' },
+}
+
+interface TopBarProps {
+  mode: Mode
+  onModeChange: (mode: Mode) => void
+  annotationCount: number
+  canUndo: boolean
+  onUndo: () => void
+  bridgeStatus: BridgeStatus
+  previewOrigin: string
+  /** null 表示握手成功但快照尚未到达。 */
+  elementCount: number | null
+}
+
+export function TopBar({
+  mode,
+  onModeChange,
+  annotationCount,
+  canUndo,
+  onUndo,
+  bridgeStatus,
+  previewOrigin,
+  elementCount,
+}: TopBarProps) {
+  const status = STATUS_META[bridgeStatus]
+
+  return (
+    <header className="relative z-40 flex h-[60px] shrink-0 items-center gap-3 border-b border-white/[0.08] bg-[#0c0f15] px-3">
+      <div className="flex w-[250px] min-w-0 shrink-0 items-center gap-2.5">
+        <div className="logo-mark">
+          <Icon name="sparkles" size={16} />
+        </div>
+        <div className="min-w-0">
+          <div className="truncate text-[13px] font-semibold tracking-tight text-white">
+            Vibe Canvas
+          </div>
+          <div className="-mt-0.5 truncate text-[10px] text-slate-500">
+            visual intent → markdown prompt
+          </div>
+        </div>
+        <div className="ml-1 hidden min-w-0 items-center gap-1.5 rounded-lg bg-white/[0.04] px-2 py-1 ring-1 ring-white/[0.08] 2xl:flex">
+          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${status.dot}`} />
+          <span className="truncate font-mono text-[9px] text-slate-400">
+            {previewOrigin.replace(/^https?:\/\//, '')}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex min-w-0 flex-1 justify-center">
+        <div
+          className="flex items-center gap-0.5 overflow-x-auto rounded-xl bg-white/[0.04] p-1 ring-1 ring-white/[0.08]"
+          role="toolbar"
+          aria-label="画布模式"
+        >
+          {MODES.map((option, index) => (
+            <span key={option.mode} className="contents">
+              {index === 2 && <span className="mx-1 h-4 w-px bg-white/10" />}
+              <button
+                type="button"
+                onClick={() => onModeChange(option.mode)}
+                aria-pressed={mode === option.mode}
+                data-mode={option.mode}
+                className={`mode-btn ${mode === option.mode ? 'is-active' : ''}`}
+                title={`${option.label}模式 (${option.shortcut})`}
+              >
+                <Icon name={option.icon} size={12} />
+                {option.label}
+                <kbd>{option.shortcut}</kbd>
+              </button>
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex w-[300px] shrink-0 items-center justify-end gap-2">
+        <span
+          data-testid="bridge-status"
+          className={`hidden items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 font-mono text-[9px] xl:inline-flex ${status.text}`}
+          title={
+            bridgeStatus === 'connected'
+              ? elementCount === null
+                ? '握手成功，正在同步快照'
+                : `已同步 ${elementCount} 个 data-source 节点`
+              : '等待 mock iframe 握手'
+          }
+        >
+          <span className={`h-1.5 w-1.5 rounded-full ${status.dot}`} />
+          {status.label}
+          {bridgeStatus === 'connected' && (
+            <span className="text-slate-500">
+              {elementCount === null ? '同步中' : `${elementCount} 节点`}
+            </span>
+          )}
+        </span>
+
+        <span className="hidden items-center gap-1.5 rounded-full border border-indigo-400/20 bg-indigo-400/10 px-2.5 py-1 text-[9px] font-medium text-indigo-200 md:inline-flex">
+          Mock iframe
+        </span>
+
+        <button
+          type="button"
+          onClick={onUndo}
+          disabled={!canUndo}
+          className="btn-ghost grid h-8 w-8 place-items-center rounded-lg disabled:opacity-30"
+          title="撤销上一条标注 (⌘/Ctrl + Z)"
+          aria-label="撤销上一条标注"
+        >
+          <Icon name="undo" size={14} />
+        </button>
+
+        <span className="grid h-7 min-w-7 place-items-center rounded-lg bg-white/[0.06] px-2 text-[10px] font-semibold text-slate-300">
+          {annotationCount}
+        </span>
+      </div>
+    </header>
+  )
+}

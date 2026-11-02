@@ -1,0 +1,371 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+  font-family:
+    "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background: #080a0f;
+}
+
+button {
+  font: inherit;
+}
+
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+::selection {
+  background: rgba(99, 102, 241, 0.35);
+  color: #fff;
+}
+
+:focus-visible {
+  outline: 2px solid rgba(129, 140, 248, 0.65);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------- 画布背景 */
+
+.canvas-grid {
+  background-color: #080a0f;
+  background-image:
+    radial-gradient(circle, rgba(148, 163, 184, 0.14) 1px, transparent 1.2px),
+    radial-gradient(
+      ellipse at 50% 42%,
+      rgba(30, 41, 59, 0.35) 0%,
+      transparent 68%
+    );
+}
+
+/* ---------------------------------------------------------------- 通用控件 */
+
+.logo-mark {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  place-items: center;
+  border: 1px solid rgba(129, 140, 248, 0.32);
+  border-radius: 10px;
+  color: #c7d2fe;
+  background:
+    linear-gradient(135deg, rgba(99, 102, 241, 0.4), rgba(168, 85, 247, 0.16));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 8px 20px -8px rgba(79, 70, 229, 0.65);
+}
+
+.mode-btn {
+  display: inline-flex;
+  height: 28px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px;
+  border-radius: 8px;
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition:
+    color 120ms ease,
+    background-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.mode-btn kbd {
+  padding: 1px 3px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #64748b;
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  font-size: 8px;
+  line-height: 1.2;
+}
+
+.mode-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #e2e8f0;
+}
+
+.mode-btn.is-active {
+  background: linear-gradient(180deg, #6366f1, #4f46e5);
+  color: #fff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 4px 12px -4px rgba(79, 70, 229, 0.7);
+}
+
+.mode-btn.is-active kbd {
+  background: rgba(0, 0, 0, 0.18);
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.btn-primary {
+  border: 1px solid rgba(165, 180, 252, 0.28);
+  background: linear-gradient(180deg, #6366f1, #4f46e5);
+  color: #fff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 8px 18px -8px rgba(79, 70, 229, 0.85);
+  transition:
+    filter 120ms ease,
+    box-shadow 120ms ease,
+    opacity 120ms ease;
+}
+
+.btn-primary:not(:disabled):hover {
+  filter: brightness(1.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 10px 24px -8px rgba(79, 70, 229, 0.95);
+}
+
+.btn-primary:not(:disabled):active {
+  filter: brightness(0.96);
+}
+
+.btn-ghost {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: #cbd5e1;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+.btn-ghost:not(:disabled):hover {
+  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+}
+
+/* ---------------------------------------------------------------- 滚动条 */
+
+.panel-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.22) transparent;
+}
+
+.panel-scroll::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+.panel-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.panel-scroll::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.22);
+  background-clip: content-box;
+}
+
+.panel-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.38);
+  background-clip: content-box;
+}
+
+/* ------------------------------------------------------------ Markdown */
+
+.prompt-markdown {
+  color: #cbd5e1;
+  font-size: 10.5px;
+  line-height: 1.72;
+  overflow-wrap: anywhere;
+}
+
+.prompt-markdown > :first-child {
+  margin-top: 0;
+}
+
+.prompt-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.prompt-markdown h1,
+.prompt-markdown h2,
+.prompt-markdown h3,
+.prompt-markdown h4 {
+  margin: 1.25em 0 0.55em;
+  color: #f1f5f9;
+  font-weight: 650;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+}
+
+.prompt-markdown h1 {
+  padding-bottom: 0.35em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 1.5em;
+}
+
+.prompt-markdown h2 {
+  font-size: 1.24em;
+}
+
+.prompt-markdown h3 {
+  font-size: 1.1em;
+}
+
+.prompt-markdown h4 {
+  font-size: 1em;
+  color: #e2e8f0;
+}
+
+.prompt-markdown p {
+  margin: 0.6em 0;
+}
+
+.prompt-markdown strong {
+  color: #f8fafc;
+  font-weight: 600;
+}
+
+.prompt-markdown em {
+  color: #e2e8f0;
+}
+
+.prompt-markdown a {
+  color: #a5b4fc;
+  text-decoration: underline;
+  text-decoration-color: rgba(165, 180, 252, 0.35);
+  text-underline-offset: 2px;
+}
+
+.prompt-markdown a:hover {
+  color: #c7d2fe;
+}
+
+.prompt-markdown ul,
+.prompt-markdown ol {
+  margin: 0.55em 0;
+  padding-left: 1.35em;
+}
+
+.prompt-markdown li {
+  margin: 0.22em 0;
+}
+
+.prompt-markdown li > p {
+  margin: 0.2em 0;
+}
+
+.prompt-markdown li::marker {
+  color: #818cf8;
+}
+
+.prompt-markdown blockquote {
+  margin: 0.8em 0;
+  padding: 0.5em 0.8em;
+  border-left: 2px solid rgba(129, 140, 248, 0.6);
+  border-radius: 0 6px 6px 0;
+  background: rgba(99, 102, 241, 0.06);
+  color: #94a3b8;
+}
+
+.prompt-markdown blockquote > :first-child {
+  margin-top: 0;
+}
+
+.prompt-markdown blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+.prompt-markdown code {
+  padding: 0.12em 0.36em;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.1);
+  color: #e2e8f0;
+  font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
+  font-size: 0.92em;
+}
+
+.prompt-markdown pre {
+  margin: 0.8em 0;
+  padding: 0.8em 0.9em;
+  overflow-x: auto;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  background: #080b11;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.2) transparent;
+}
+
+.prompt-markdown pre code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #cbd5e1;
+  font-size: 0.95em;
+  line-height: 1.6;
+  white-space: pre;
+}
+
+.prompt-markdown table {
+  display: block;
+  width: 100%;
+  margin: 0.8em 0;
+  overflow-x: auto;
+  border-spacing: 0;
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
+
+.prompt-markdown th,
+.prompt-markdown td {
+  padding: 0.35em 0.55em;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: left;
+}
+
+.prompt-markdown th {
+  background: rgba(255, 255, 255, 0.045);
+  color: #e2e8f0;
+  font-weight: 600;
+}
+
+.prompt-markdown hr {
+  margin: 1.2em 0;
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.prompt-markdown input[type="checkbox"] {
+  margin-right: 0.4em;
+  accent-color: #6366f1;
+}
+
+.prompt-markdown .md-image-placeholder {
+  display: inline-block;
+  padding: 0.1em 0.35em;
+  border: 1px dashed rgba(148, 163, 184, 0.25);
+  border-radius: 4px;
+  color: #64748b;
+  font-size: 0.9em;
+}

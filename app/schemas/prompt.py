@@ -66,6 +66,13 @@ class Point(CamelModel):
     y: float
 
 
+class Delta(CamelModel):
+    """拖拽位移向量；字段名按 API 文档固定为 dx / dy。"""
+
+    dx: float
+    dy: float
+
+
 class Rect(CamelModel):
     """矩形区域；坐标语义由外层字段说明。"""
 
@@ -269,7 +276,7 @@ class Drag(CamelModel):
     kind: Literal["drag"] = "drag"
     start: Point = Field(alias="from")
     end: Point = Field(alias="to")
-    delta: Point
+    delta: Delta
     axis: Literal["x", "y", "both"]
     related_sources: list[str] = Field(default_factory=list, max_length=20)
     spatial_summary: str = Field(min_length=1, max_length=500)
@@ -277,11 +284,11 @@ class Drag(CamelModel):
     @model_validator(mode="after")
     def _validate_delta(self) -> "Drag":
         """delta 必须与 to - from 一致，避免前端状态错位。"""
-        expected_x = self.end.x - self.start.x
-        expected_y = self.end.y - self.start.y
+        expected_dx = self.end.x - self.start.x
+        expected_dy = self.end.y - self.start.y
         if (
-            abs(expected_x - self.delta.x) > 0.01
-            or abs(expected_y - self.delta.y) > 0.01
+            abs(expected_dx - self.delta.dx) > 0.01
+            or abs(expected_dy - self.delta.dy) > 0.01
         ):
             raise ValueError("delta 必须等于 to - from")
         return self

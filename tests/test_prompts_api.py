@@ -314,7 +314,7 @@ def test_drag_delta_mismatch_is_rejected() -> None:
         "kind": "drag",
         "from": {"x": 10, "y": 20},
         "to": {"x": 30, "y": 40},
-        "delta": {"x": 99, "y": 20},
+        "delta": {"dx": 99, "dy": 20},
         "axis": "both",
         "relatedSources": [SOURCE],
         "spatialSummary": "向右下方移动",
@@ -324,6 +324,26 @@ def test_drag_delta_mismatch_is_rejected() -> None:
 
     assert resp.status_code == 400, resp.text
     assert resp.json()["error"]["code"] == "VALIDATION_FAILED"
+
+
+def test_drag_delta_is_rendered_in_prompt() -> None:
+    annotation = _annotation("drag")
+    annotation["drag"] = {
+        "kind": "drag",
+        "from": {"x": 10, "y": 20},
+        "to": {"x": 30, "y": 60},
+        "delta": {"dx": 20, "dy": 40},
+        "axis": "both",
+        "relatedSources": [SOURCE],
+        "spatialSummary": "按钮向右下方移动",
+    }
+
+    resp = _post(_payload([annotation]), _headers())
+
+    assert resp.status_code == 200, resp.text
+    content = resp.json()["prompt"]["content"]
+    assert "dx=20.0, dy=40.0" in content
+    assert "按钮向右下方移动" in content
 
 
 # ---------------------------------------------------------------- 安全校验
