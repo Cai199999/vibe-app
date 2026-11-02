@@ -54,10 +54,20 @@
   - 合成图红色像素 8661，原图 0，证明红笔轨迹已叠加；
   - 粘贴图片可替换当前截图。
 
+## 真实 DeepSeek 验证
+
+配置真实 `DEEPSEEK_API_KEY` 并重启后，直接以 `/tmp/vibe-composite.png`（Northwind 页面 +
+搜索框红圈）调用 `/api/v1/prompts/generate`：
+
+- 返回 `status=ok`、`model=deepseek-flash`、无 warnings；
+- Markdown 准确识别红圈内容为顶部导航的搜索输入框，placeholder 为
+  「搜索项目、客户或订单…」，左侧为品牌标识「Northwind」；
+- Prompt 要求先按界面文本定位文件、不得编造路径，并给出加宽、提高边框/文字对比度、
+  保持原有交互行为的具体指令。
+
 ## 已知限制
 
-- 本地 `.env` 的 `DEEPSEEK_API_KEY` 为空，**尚未验证真实 `deepseek-flash` 的识图准确率**；
-  Mock 路径只能验证前端合成、字段路由与 UI 展示。
+- 真实视觉识别已用 Northwind 搜索框截图验证；仍需更多页面类型做 Prompt 质量评估。
 - Firefox 合成 `ClipboardEvent` 会丢弃 `clipboardData`，E2E 通过 `Object.defineProperty`
   模拟真实粘贴事件；真实 `Ctrl/Cmd+V` 仍需在目标浏览器人工确认。
 - 截图只存在内存，刷新页面即丢失；不做自动截屏、不落盘、不上传对象存储。
