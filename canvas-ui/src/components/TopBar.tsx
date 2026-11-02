@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 
+import { VISUAL_PRIVACY_WARNING } from '../lib/messages'
 import { Icon, type IconName } from './ui/Icon'
 import type {
   BridgeStatus,
@@ -22,6 +23,8 @@ const MODES: ModeOption[] = [
   { mode: 'drag', label: '拖拽', shortcut: 'D', icon: 'drag' },
 ]
 
+const VISUAL_MODES = new Set<Mode>(['interact', 'hand', 'draw'])
+
 const STATUS_META: Record<
   BridgeStatus,
   { label: string; dot: string; text: string }
@@ -37,12 +40,12 @@ const STATUS_META: Record<
     text: 'text-amber-300',
   },
   connected: {
-    label: '已连接源码模式',
+    label: '源码',
     dot: 'bg-emerald-400',
     text: 'text-emerald-300',
   },
   visual: {
-    label: '仅视觉模式',
+    label: '视觉',
     dot: 'bg-amber-400',
     text: 'text-amber-300',
   },
@@ -55,6 +58,7 @@ interface TopBarProps {
   canUndo: boolean
   onUndo: () => void
   bridgeStatus: BridgeStatus
+  bridgeError: string | null
   previewOrigin: string | null
   projectName: string | null
   /** null 表示握手成功但快照尚未到达。 */
@@ -63,6 +67,7 @@ interface TopBarProps {
   screenshotLoading: boolean
   onUploadScreenshot: (file: File) => void
   onRemoveScreenshot: () => void
+  onExit: () => void
 }
 
 export function TopBar({
@@ -72,6 +77,7 @@ export function TopBar({
   canUndo,
   onUndo,
   bridgeStatus,
+  bridgeError,
   previewOrigin,
   projectName,
   elementCount,
@@ -79,23 +85,35 @@ export function TopBar({
   screenshotLoading,
   onUploadScreenshot,
   onRemoveScreenshot,
+  onExit,
 }: TopBarProps) {
   const status = STATUS_META[bridgeStatus]
   const fileInputRef = useRef<HTMLInputElement>(null)
   const visualMode = bridgeStatus === 'visual'
+  const modes = visualMode
+    ? MODES.filter((option) => VISUAL_MODES.has(option.mode))
+    : MODES
+
+  const statusTitle =
+    bridgeStatus === 'connected'
+      ? elementCount === null
+        ? '握手成功，正在同步快照'
+        : `已同步 ${elementCount} 个 data-source 节点`
+      : bridgeStatus === 'visual'
+        ? bridgeError ?? '仅视觉模式：上传截图后生成 Prompt'
+        : bridgeStatus === 'idle'
+          ? '尚未加载项目'
+          : '正在探测项目内的 Vibe SDK（3 秒）'
 
   return (
     <header className="relative z-40 flex h-[60px] shrink-0 items-center gap-3 border-b border-white/[0.08] bg-[#0c0f15] px-3">
-      <div className="flex w-[250px] min-w-0 shrink-0 items-center gap-2.5">
+      <div className="flex w-[230px] min-w-0 shrink-0 items-center gap-2.5">
         <div className="logo-mark">
           <Icon name="sparkles" size={16} />
         </div>
         <div className="min-w-0">
           <div className="truncate text-[13px] font-semibold tracking-tight text-white">
             Vibe Canvas
-          </div>
-          <div className="-mt-0.5 truncate text-[10px] text-slate-500">
-            visual intent → markdown prompt
           </div>
         </div>
         {previewOrigin && (
@@ -114,9 +132,11 @@ export function TopBar({
           role="toolbar"
           aria-label="画布模式"
         >
-          {MODES.map((option, index) => (
+          {modes.map((option, index) => (
             <span key={option.mode} className="contents">
-              {index === 2 && <span className="mx-1 h-4 w-px bg-white/10" />}
+              {index === 2 && !visualMode && (
+                <span className="mx-1 h-4 w-px bg-white/10" />
+              )}
               <button
                 type="button"
                 onClick={() => onModeChange(option.mode)}
@@ -165,7 +185,7 @@ export function TopBar({
                 ) : (
                   <Icon name="image" size={12} />
                 )}
-                {screenshotLoading ? '处理中' : screenshot ? '截图' : '上传截图'}
+                {screenshotLoading ? '处理中' : screenshot ? '截图' : '上传'}
               </button>
               {screenshot && (
                 <button
@@ -184,33 +204,33 @@ export function TopBar({
         </div>
       </div>
 
-      <div className="flex w-[340px] shrink-0 items-center justify-end gap-2">
+      <div className="flex w-[330px] shrink-0 items-center justify-end gap-1.5">
+        {visualMode && (
+          <span
+            data-testid="visual-privacy-warning"
+            title={VISUAL_PRIVACY_WARNING}
+            aria-label={VISUAL_PRIVACY_WARNING}
+            className="grid h-7 w-7 place-items-center rounded-full text-amber-300/70 transition hover:bg-amber-400/10 hover:text-amber-200"
+          >
+            <Icon name="lock" size={12} />
+          </span>
+        )}
+
         <span
           data-testid="bridge-status"
-          className={`hidden items-center gap-1.5 whitespace-nowrap rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 font-mono text-[9px] xl:inline-flex ${status.text}`}
-          title={
-            bridgeStatus === 'connected'
-              ? elementCount === null
-                ? '握手成功，正在同步快照'
-                : `已同步 ${elementCount} 个 data-source 节点`
-              : bridgeStatus === 'visual'
-                ? '未检测到源码插件：上传截图并圈画后可用视觉模型生成'
-                : bridgeStatus === 'idle'
-                  ? '尚未加载项目'
-                  : '正在探测项目内的 Vibe SDK（3 秒）'
-          }
+          aria-label={statusTitle}
+          title={statusTitle}
+          className={`hidden items-center gap-1.5 whitespace-nowrap rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 font-mono text-[9px] md:inline-flex ${status.text}`}
         >
           <span className={`h-1.5 w-1.5 rounded-full ${status.dot}`} />
           {status.label}
-          {bridgeStatus === 'connected' && (
-            <span className="text-slate-500">
-              {elementCount === null ? '同步中' : `${elementCount} 节点`}
-            </span>
+          {bridgeStatus === 'connected' && elementCount !== null && (
+            <span className="text-slate-500">{elementCount}</span>
           )}
         </span>
 
-        <span className="hidden max-w-[120px] items-center gap-1.5 truncate rounded-full border border-indigo-400/20 bg-indigo-400/10 px-2.5 py-1 text-[9px] font-medium text-indigo-200 md:inline-flex">
-          {projectName ?? '未加载项目'}
+        <span className="hidden max-w-[96px] items-center gap-1.5 truncate rounded-full border border-indigo-400/20 bg-indigo-400/10 px-2.5 py-1 text-[9px] font-medium text-indigo-200 lg:inline-flex">
+          {projectName ?? '未加载'}
         </span>
 
         <button
@@ -227,6 +247,17 @@ export function TopBar({
         <span className="grid h-7 min-w-7 place-items-center rounded-lg bg-white/[0.06] px-2 text-[10px] font-semibold text-slate-300">
           {annotationCount}
         </span>
+
+        <button
+          type="button"
+          data-testid="exit-workspace"
+          onClick={onExit}
+          className="btn-ghost ml-0.5 grid h-8 w-8 place-items-center rounded-lg"
+          title="退出并切换模式"
+          aria-label="退出并切换模式"
+        >
+          <Icon name="home" size={14} />
+        </button>
       </div>
     </header>
   )

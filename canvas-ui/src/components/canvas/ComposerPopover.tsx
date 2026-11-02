@@ -110,22 +110,20 @@ export function ComposerPopover({
       />
 
       {draft.visualOnly && (
-        <p
+        <span
           data-testid="composer-visual-privacy-warning"
-          className="mt-2 rounded-md border border-amber-400/15 bg-amber-400/[0.06] px-2 py-1.5 text-[9px] leading-relaxed text-amber-200/80"
+          title={VISUAL_PRIVACY_WARNING}
+          aria-label={VISUAL_PRIVACY_WARNING}
+          className="mt-2 inline-flex items-center gap-1 rounded-md border border-amber-400/15 bg-amber-400/[0.05] px-1.5 py-1 text-[9px] text-amber-200/75"
         >
-          {VISUAL_PRIVACY_WARNING}
-        </p>
+          <Icon name="lock" size={10} />
+          截图不脱敏
+        </span>
       )}
 
       <div className="mt-2 flex items-center justify-between gap-2">
         <span className="text-[9px] text-slate-600">
-          {draft.visualOnly
-            ? '仅视觉标注 · 上传截图后可生成 · '
-            : noteRequired
-              ? '旁注内容必填 · '
-              : '可选补充意图 · '}
-          ⌘/Ctrl + Enter 保存
+          {noteRequired ? '必填 · ' : ''}⌘/Ctrl + Enter
         </span>
         <div className="flex items-center gap-1.5">
           <button

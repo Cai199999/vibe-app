@@ -24,10 +24,7 @@ import {
   worldToScreen,
 } from '../../lib/geometry'
 import { createAnnotationId } from '../../lib/ids'
-import {
-  VISUAL_NO_SOURCE_MESSAGE,
-  VISUAL_PRIVACY_WARNING,
-} from '../../lib/messages'
+import { VISUAL_NO_SOURCE_MESSAGE } from '../../lib/messages'
 import { toWorldTarget } from '../../lib/targets'
 import type {
   BridgeTarget,
@@ -47,7 +44,6 @@ import { CanvasControls } from './CanvasControls'
 import { ComposerPopover } from './ComposerPopover'
 import { HoverBox } from './HoverBox'
 import { PreviewFrame } from './PreviewFrame'
-import { ProjectLauncher } from './ProjectLauncher'
 import { ScreenshotLayer } from './ScreenshotLayer'
 import { Icon } from '../ui/Icon'
 
@@ -69,22 +65,6 @@ type Gesture =
     }
 
 type ComposerSeed = Omit<ComposerDraft, 'screen'>
-
-const MODE_HINT: Record<Mode, string> = {
-  interact: '预览可交互；滚轮/中键由页面接管，切到抓手或旁注再操作画布。',
-  hand: '拖动画布查看不同区域；滚轮缩放，按住中键拖拽平移。',
-  note: '点击页面元素，写下修改意图。',
-  draw: '按住拖动画圈，圈住要修改的区域。',
-  drag: '拖拽元素表达目标位置，不会直接修改 DOM。',
-}
-
-const MODE_LABEL: Record<Mode, string> = {
-  interact: '交互模式',
-  hand: '抓手模式',
-  note: '旁注模式',
-  draw: '圈画模式',
-  drag: '拖拽模式',
-}
 
 /** 滚轮缩放手感：按像素增量做指数缩放，避免触控板连发事件时突进。 */
 const WHEEL_ZOOM_SENSITIVITY = 0.0006
@@ -128,9 +108,9 @@ function defaultTargetSummary(target: WorldTarget): string {
 
 interface CanvasStageProps {
   bridge: IframeBridge
+  workspace: 'source' | 'visual'
   project: LocalProject | null
   screenshot: ScreenshotAsset | null
-  onLoadProject: (project: LocalProject) => void
   onChangeProject: () => void
   annotations: CanvasAnnotation[]
   selectedId: string | null
@@ -144,9 +124,9 @@ interface CanvasStageProps {
 
 export function CanvasStage({
   bridge,
+  workspace,
   project,
   screenshot,
-  onLoadProject,
   onChangeProject,
   annotations,
   selectedId,
@@ -184,6 +164,9 @@ export function CanvasStage({
   const composerRef = useRef<ComposerDraft | null>(null)
   const annotationCountRef = useRef(annotations.length)
   composerRef.current = composer
+
+  const visualMode = workspace === 'visual' || bridge.status === 'visual'
+  const showArtboard = Boolean(project) || workspace === 'visual'
 
   const showError = useCallback(
     (error: unknown, fallback: string) => {
@@ -826,9 +809,8 @@ export function CanvasStage({
 
       setComposer(null)
       clearLive()
-      showToast('已添加标注', 'success')
     },
-    [clearLive, onAdd, showToast],
+    [clearLive, onAdd],
   )
 
   useEffect(() => {
@@ -927,15 +909,15 @@ export function CanvasStage({
   }, [clearLive, closeComposer, hideHover, onModeChange, onUndo])
 
   useEffect(() => {
-    if (!project) return
+    if (!project && workspace !== 'visual') return
     closeComposer()
     hideHover()
     setPanning(false)
     const frame = requestAnimationFrame(fit)
     return () => cancelAnimationFrame(frame)
-    // project.id 变化代表重新加载/切换项目，需要重新适配视图。
+    // 进入源码项目或截图工作区时重新适配视图。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project?.id])
+  }, [project?.id, workspace])
 
   useEffect(() => {
     const onBlur = () => {
@@ -969,7 +951,7 @@ export function CanvasStage({
       onPointerCancel={onCanvasPointerCancel}
       onPointerLeave={hideHover}
     >
-      {project ? (
+      {showArtboard && (
         <div
           className="absolute left-0 top-0 origin-top-left will-change-transform"
           data-testid="artboard"
@@ -981,42 +963,95 @@ export function CanvasStage({
           onMouseDown={suppressMiddleClick}
           onAuxClick={stopAuxClick}
         >
-          <PreviewFrame
-            iframeRef={bridge.iframeRef}
-            project={project}
-            status={bridge.status}
-            revision={bridge.snapshot?.revision ?? null}
-            onChangeProject={onChangeProject}
-          />
+          {project ? (
+            <PreviewFrame
+              iframeRef={bridge.iframeRef}
+              project={project}
+              status={bridge.status}
+              onChangeProject={onChangeProject}
+            />
+          ) : (
+            <section
+              data-testid="visual-workspace"
+              className="absolute left-0 top-0 overflow-hidden rounded-[14px] bg-[#0f131b] shadow-[0_30px_90px_-20px_rgba(0,0,0,0.8)] ring-1 ring-white/10"
+              style={{ width: ARTBOARD_WIDTH, height: ARTBOARD_HEIGHT }}
+            >
+              <div className="flex h-11 items-center gap-3 border-b border-white/[0.08] bg-[#0f131b] px-4">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f57]" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#febc2e]" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
+                </div>
+                <div className="mx-2 flex h-7 min-w-0 flex-1 items-center justify-center gap-2 rounded-md bg-white/[0.04] px-3 ring-1 ring-white/[0.06]">
+                  <span className="h-2 w-2 shrink-0 rounded-full bg-amber-400/80" />
+                  <span className="truncate font-mono text-[10px] text-slate-400">
+                    视觉截图工作区
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={onChangeProject}
+                  className="btn-ghost flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-[9px]"
+                  title="退出并切换模式"
+                >
+                  <Icon name="home" size={11} />
+                  切换
+                </button>
+              </div>
 
-          {bridge.status === 'visual' && screenshot && (
+              <div
+                className="relative bg-[#070a10]"
+                style={{ height: IFRAME_HEIGHT }}
+              >
+                {!screenshot && (
+                  <div className="absolute inset-0 grid place-items-center">
+                    <div className="text-center">
+                      <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl border border-amber-400/15 bg-amber-400/[0.06] text-amber-300/80">
+                        <Icon name="image" size={20} />
+                      </div>
+                      <p className="mt-3 text-[12px] font-medium text-slate-300">
+                        上传或粘贴截图
+                      </p>
+                      <p className="mt-1 text-[10px] text-slate-600">
+                        顶部「上传」· Ctrl / ⌘ + V
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
+          {visualMode && screenshot && (
             <ScreenshotLayer screenshot={screenshot} />
           )}
 
-        <div
-          data-testid="preview-capture"
-          className="absolute left-0 z-10"
-          style={{
-            top: IFRAME_ORIGIN.y,
-            width: ARTBOARD_WIDTH,
-            height: IFRAME_HEIGHT,
-            pointerEvents:
-              mode === 'interact' && !spaceDown && !composer ? 'none' : 'auto',
-            cursor,
-          }}
-          onPointerDown={onCapturePointerDown}
-        />
+          <div
+            data-testid="preview-capture"
+            className="absolute left-0 z-10"
+            style={{
+              top: IFRAME_ORIGIN.y,
+              width: ARTBOARD_WIDTH,
+              height: IFRAME_HEIGHT,
+              pointerEvents:
+                mode === 'interact' && !spaceDown && !composer
+                  ? 'none'
+                  : 'auto',
+              cursor,
+            }}
+            onPointerDown={onCapturePointerDown}
+          />
 
-        <AnnotationScene
-          annotations={annotations}
-          selectedId={selectedId}
-          liveDrawPoints={liveDrawPoints}
-          liveDrag={liveDrag}
-        />
+          <AnnotationScene
+            annotations={annotations}
+            selectedId={selectedId}
+            liveDrawPoints={liveDrawPoints}
+            liveDrag={liveDrag}
+          />
 
-        {hoverTarget && mode !== 'interact' && mode !== 'hand' && (
-          <HoverBox target={hoverTarget} zoom={viewport.zoom} />
-        )}
+          {hoverTarget && mode !== 'interact' && mode !== 'hand' && (
+            <HoverBox target={hoverTarget} zoom={viewport.zoom} />
+          )}
 
           <AnnotationPins
             annotations={annotations}
@@ -1025,49 +1060,16 @@ export function CanvasStage({
             onSelect={onSelect}
           />
         </div>
-      ) : (
-        <ProjectLauncher onLoad={onLoadProject} />
       )}
 
-      {project && (
-        <>
-          <div className="pointer-events-none absolute left-4 top-4 z-40 flex items-center gap-2 rounded-full border border-white/10 bg-[#0c0f15]/80 px-3 py-1.5 text-[10px] text-slate-400 backdrop-blur">
-            <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" />
-            <span>{MODE_LABEL[mode]}</span>
-            <span className="hidden text-slate-600 sm:inline">
-              {bridge.status === 'visual'
-                ? screenshot
-                  ? '截图标注：按 P 圈画，点击生成会合成红笔轨迹并调用视觉模型。'
-                  : '仅视觉模式：点击元素不可用；先上传截图，再按 P 圈画。'
-                : MODE_HINT[mode]}
-            </span>
-          </div>
-
-          {bridge.status === 'visual' && (
-            <div
-              data-testid="visual-privacy-warning"
-              className="pointer-events-none absolute left-4 top-[52px] z-40 max-w-[420px] rounded-lg border border-amber-400/15 bg-[#0c0f15]/85 px-3 py-1.5 text-[9px] leading-relaxed text-amber-200/75 backdrop-blur"
-            >
-              {VISUAL_PRIVACY_WARNING}
-            </div>
-          )}
-
-          <div className="pointer-events-none absolute bottom-5 left-1/2 z-30 hidden -translate-x-1/2 items-center gap-3 rounded-full border border-white/[0.07] bg-[#0c0f15]/75 px-3 py-1.5 text-[10px] text-slate-500 backdrop-blur md:flex">
-            <span>中键拖拽 / 空格 + 拖动 平移</span>
-            <span className="h-3 w-px bg-white/10" />
-            <span>滚轮 ↑ 缩小 · ↓ 放大</span>
-            <span className="h-3 w-px bg-white/10" />
-            <span>Esc 取消</span>
-          </div>
-
-          <CanvasControls
-            zoom={viewport.zoom}
-            onZoomIn={() => zoomBy(1.12)}
-            onZoomOut={() => zoomBy(0.89)}
-            onReset={resetZoom}
-            onFit={fit}
-          />
-        </>
+      {showArtboard && (
+        <CanvasControls
+          zoom={viewport.zoom}
+          onZoomIn={() => zoomBy(1.12)}
+          onZoomOut={() => zoomBy(0.89)}
+          onReset={resetZoom}
+          onFit={fit}
+        />
       )}
 
       {composer && (
@@ -1076,16 +1078,6 @@ export function CanvasStage({
           onCancel={closeComposer}
           onSave={saveComposer}
         />
-      )}
-
-      {bridge.status === 'visual' && bridge.lastError && (
-        <div
-          data-testid="visual-mode-banner"
-          className="pointer-events-none absolute right-4 top-4 z-40 flex max-w-[360px] items-center gap-2 rounded-lg border border-amber-400/25 bg-amber-950/70 px-3 py-1.5 text-[10px] leading-relaxed text-amber-200 backdrop-blur"
-        >
-          <Icon name="alert" size={12} />
-          {bridge.lastError}
-        </div>
       )}
     </main>
   )

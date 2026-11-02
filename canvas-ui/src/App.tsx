@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import { CanvasStage } from './components/canvas/CanvasStage'
+import { LandingPage } from './components/landing/LandingPage'
 import { RightPanel } from './components/panel/RightPanel'
 import { TopBar } from './components/TopBar'
 import { Icon } from './components/ui/Icon'
@@ -14,7 +15,22 @@ import { composeScreenshotWithDrawings } from './lib/screenshot'
 import { VISUAL_REQUIRE_SCREENSHOT_MESSAGE } from './lib/messages'
 import type { LocalProject, Mode } from './types/vibe'
 
+type Workspace = 'landing' | 'source' | 'visual'
+
+/**
+ * 截图工作区没有真实项目，但仍需要构造 L3 请求的项目元信息。
+ * 使用固定回环 Origin，既符合后端预览地址校验，也不会产生真实网络请求。
+ */
+const SCREENSHOT_PROJECT: LocalProject = {
+  id: 'prj_screenshot_workspace',
+  name: '截图工作区',
+  url: 'http://127.0.0.1:5173/',
+  origin: 'http://127.0.0.1:5173',
+  loadedAt: '2026-01-01T00:00:00.000Z',
+}
+
 function App() {
+  const [workspace, setWorkspace] = useState<Workspace>('landing')
   const [project, setProject] = useState<LocalProject | null>(null)
   const [mode, setMode] = useState<Mode>('note')
   const [panelOpen, setPanelOpen] = useState(true)
@@ -23,6 +39,7 @@ function App() {
   const bridge = useIframeBridge(
     project?.origin ?? null,
     project?.id ?? null,
+    workspace === 'visual',
   )
   const {
     annotations,
@@ -35,7 +52,7 @@ function App() {
   } = useAnnotations()
   const prompt = usePromptGeneration()
   const { toast, show } = useToast()
-  const visualMode = bridge.status === 'visual'
+  const visualMode = workspace === 'visual' || bridge.status === 'visual'
   const {
     screenshot,
     loading: screenshotLoading,
@@ -55,29 +72,51 @@ function App() {
     resetPrompt()
   }, [bridge.status, screenshot?.dataUrl, resetPrompt])
 
-  const handleLoadProject = useCallback(
+  const handleEnterSource = useCallback(
     (next: LocalProject) => {
+      setWorkspace('source')
       setProject(next)
+      setMode('note')
       // 不同项目的 data-source、截图与源码片段不可混用。
       clear()
       clearScreenshot()
       resetPrompt()
-      show(`已加载 ${next.origin}，等待 SDK 握手…`, 'info')
     },
-    [clear, clearScreenshot, resetPrompt, show],
+    [clear, clearScreenshot, resetPrompt],
   )
 
-  const handleChangeProject = useCallback(() => {
+  const handleEnterVisual = useCallback(() => {
+    setWorkspace('visual')
     setProject(null)
+    setMode('draw')
     clear()
     clearScreenshot()
     resetPrompt()
-    show('已卸载当前项目，可重新输入项目地址。', 'info')
-  }, [clear, clearScreenshot, resetPrompt, show])
+  }, [clear, clearScreenshot, resetPrompt])
+
+  const handleExitWorkspace = useCallback(() => {
+    setWorkspace('landing')
+    setProject(null)
+    setMode('note')
+    setPreparing(false)
+    clear()
+    clearScreenshot()
+    resetPrompt()
+  }, [clear, clearScreenshot, resetPrompt])
+
+  const handleModeChange = useCallback(
+    (next: Mode) => {
+      if (visualMode && (next === 'note' || next === 'drag')) return
+      setMode(next)
+    },
+    [visualMode],
+  )
 
   const handleGenerate = useCallback(async () => {
-    if (!project) {
-      show('请先加载项目。', 'info')
+    const activeProject =
+      project ?? (workspace === 'visual' ? SCREENSHOT_PROJECT : null)
+    if (!activeProject) {
+      show('请先选择工作模式。', 'info')
       return
     }
 
@@ -93,18 +132,12 @@ function App() {
           screenshot,
           annotations,
         )
-        const response = await generate(
+        await generate(
           annotations,
           bridge.sessionToken,
-          project,
+          activeProject,
           imageBase64,
         )
-        if (response) {
-          show(
-            `已用视觉截图生成 ${response.prompt.charCount.toLocaleString()} 字符 Prompt`,
-            'success',
-          )
-        }
       } catch (error) {
         show(
           error instanceof Error ? error.message : '截图合成失败，请重试。',
@@ -117,24 +150,14 @@ function App() {
     }
 
     if (bridge.status !== 'connected') {
-      show('正在探测源码插件，请稍候；3 秒后会给出结果。', 'info')
+      show('源码探测中，请稍候。', 'info')
       return
     }
     if (annotations.length === 0) {
-      show('请先在预览上添加至少一条标注。', 'info')
+      show('请先添加标注。', 'info')
       return
     }
-    const response = await generate(
-      annotations,
-      bridge.sessionToken,
-      project,
-    )
-    if (response) {
-      show(
-        `已生成 ${response.prompt.charCount.toLocaleString()} 字符 Prompt`,
-        'success',
-      )
-    }
+    await generate(annotations, bridge.sessionToken, activeProject)
   }, [
     annotations,
     bridge.sessionToken,
@@ -144,40 +167,57 @@ function App() {
     screenshot,
     show,
     visualMode,
+    workspace,
   ])
+
+  if (workspace === 'landing') {
+    return (
+      <LandingPage
+        onEnterSource={handleEnterSource}
+        onEnterVisual={handleEnterVisual}
+      />
+    )
+  }
 
   const elementCount =
     bridge.snapshot?.meta.elementCount ?? bridge.snapshot?.elements.length ?? 0
+  const projectName =
+    project?.name ?? (workspace === 'visual' ? SCREENSHOT_PROJECT.name : null)
+  // 仅视觉模式不支持旁注 / 拖拽；降级瞬间直接按圈画处理，不额外派发状态更新。
+  const activeMode: Mode =
+    visualMode && (mode === 'note' || mode === 'drag') ? 'draw' : mode
 
   return (
     <div className="flex h-screen min-h-0 flex-col overflow-hidden bg-[#080a0f] text-slate-200 antialiased">
       <TopBar
-        mode={mode}
-        onModeChange={setMode}
+        mode={activeMode}
+        onModeChange={handleModeChange}
         annotationCount={annotations.length}
         canUndo={annotations.length > 0}
         onUndo={undo}
         bridgeStatus={bridge.status}
+        bridgeError={bridge.lastError}
         previewOrigin={project?.origin ?? null}
-        projectName={project?.name ?? null}
+        projectName={projectName}
         elementCount={bridge.snapshot ? elementCount : null}
         screenshot={screenshot}
         screenshotLoading={screenshotLoading}
         onUploadScreenshot={(file) => void loadScreenshot(file)}
         onRemoveScreenshot={clearScreenshot}
+        onExit={handleExitWorkspace}
       />
 
       <div className="relative flex min-h-0 flex-1">
         <CanvasStage
           bridge={bridge}
+          workspace={workspace}
           project={project}
           screenshot={screenshot}
-          onLoadProject={handleLoadProject}
-          onChangeProject={handleChangeProject}
+          onChangeProject={handleExitWorkspace}
           annotations={annotations}
           selectedId={selectedId}
-          mode={mode}
-          onModeChange={setMode}
+          mode={activeMode}
+          onModeChange={handleModeChange}
           onAdd={add}
           onSelect={select}
           onUndo={undo}
@@ -207,11 +247,9 @@ function App() {
           onClick={() => setPanelOpen((open) => !open)}
           aria-expanded={panelOpen}
           aria-controls="prompt-workbench"
-          title={panelOpen ? '收起 Prompt 工作台' : '展开 Prompt 工作台'}
+          title={panelOpen ? '收起工作台' : '展开工作台'}
           className={`absolute top-1/2 z-50 grid h-16 w-6 -translate-y-1/2 place-items-center rounded-l-lg border border-r-0 border-white/[0.1] bg-[#11151d]/95 text-slate-400 shadow-xl backdrop-blur transition-[right,color,background-color] duration-200 hover:bg-[#171c26] hover:text-white ${
-            panelOpen
-              ? 'right-[400px] xl:right-[420px]'
-              : 'right-0'
+            panelOpen ? 'right-[400px] xl:right-[420px]' : 'right-0'
           }`}
         >
           <Icon
@@ -219,7 +257,7 @@ function App() {
             size={12}
           />
           <span className="sr-only">
-            {panelOpen ? '收起 Prompt 工作台' : '展开 Prompt 工作台'}
+            {panelOpen ? '收起工作台' : '展开工作台'}
           </span>
         </button>
       </div>

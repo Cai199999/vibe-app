@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import Markdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
-import { PROMPT_API_BASE } from '../../lib/constants'
 import type { PromptResponse } from '../../types/vibe'
 import type { PromptErrorState } from '../../hooks/usePromptGeneration'
 import { Icon } from '../ui/Icon'
@@ -49,51 +48,14 @@ async function copyText(text: string): Promise<void> {
   if (!ok) throw new Error('浏览器未授予剪贴板权限')
 }
 
-function formatTime(iso: string): string {
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return ''
-  return new Intl.DateTimeFormat('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  }).format(date)
-}
-
 function EmptyPrompt() {
   return (
-    <div className="flex h-full flex-col justify-center px-5 pb-16">
-      <div className="rounded-xl border border-white/[0.07] bg-white/[0.025] p-4">
-        <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-200">
-          <span className="grid h-7 w-7 place-items-center rounded-lg bg-indigo-400/10 text-indigo-300">
-            <Icon name="sparkles" size={14} />
-          </span>
-          生成可粘贴的 Markdown 指令
-        </div>
-        <p className="mt-2.5 text-[10px] leading-relaxed text-slate-500">
-          画布只负责把空间意图转成结构化 Prompt。生成后复制到 Cursor 或 Claude
-          Code 执行；本系统不会修改代码、生成 Diff 或控制 dev server。
-        </p>
-        <ol className="mt-3 space-y-1.5 text-[10px] text-slate-500">
-          {[
-            '在预览上完成至少一条标注',
-            '点击「生成指令」调用本地 FastAPI',
-            '检查 Markdown，然后复制使用',
-          ].map((step, index) => (
-            <li key={step} className="flex items-center gap-2">
-              <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-white/[0.06] font-mono text-[8px] text-slate-400">
-                {index + 1}
-              </span>
-              {step}
-            </li>
-          ))}
-        </ol>
+    <div className="flex h-full flex-col items-center justify-center pb-16 text-center">
+      <div className="grid h-10 w-10 place-items-center rounded-xl border border-indigo-400/15 bg-indigo-400/[0.06] text-indigo-300/80">
+        <Icon name="sparkles" size={17} />
       </div>
-      <div className="mt-3 flex items-center gap-1.5 rounded-lg border border-white/[0.05] px-2.5 py-1.5 font-mono text-[8px] text-slate-600">
-        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400/70" />
-        POST {PROMPT_API_BASE}/api/v1/prompts/generate
-      </div>
+      <p className="mt-3 text-[11px] text-slate-400">暂无 Prompt</p>
+      <p className="mt-1 text-[9px] text-slate-600">完成标注后点击下方按钮</p>
     </div>
   )
 }
@@ -103,7 +65,7 @@ function LoadingPrompt() {
     <div className="space-y-3 px-1 pt-2" aria-live="polite">
       <div className="flex items-center gap-2 text-[10px] text-indigo-300">
         <span className="h-3 w-3 animate-spin rounded-full border border-indigo-300/30 border-t-indigo-300" />
-        正在组装 Prompt · 校验硬约束与脱敏…
+        生成中…
       </div>
       <div className="space-y-2 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
         {[86, 96, 72, 90, 55, 78, 64].map((width, index) => (
@@ -117,10 +79,6 @@ function LoadingPrompt() {
           />
         ))}
       </div>
-      <p className="text-[9px] leading-relaxed text-slate-600">
-        Mock Provider 不调用外部模型；真实 DeepSeek 仅在
-        PROMPT_PROVIDER=deepseek 时启用。
-      </p>
     </div>
   )
 }
@@ -177,10 +135,6 @@ export function PromptResult({
             </button>
           </div>
         </div>
-        <p className="mt-3 text-[9px] leading-relaxed text-slate-600">
-          若错误为 NETWORK_ERROR，请确认 FastAPI 已在 127.0.0.1:8000
-          启动，且 VITE_PROMPT_API_BASE 指向同一地址。
-        </p>
       </div>
     )
   }
@@ -304,11 +258,6 @@ export function PromptResult({
             {prompt.content}
           </Markdown>
         </div>
-      </div>
-
-      <div className="shrink-0 flex items-center justify-between gap-2 px-1 pt-2 text-[8px] text-slate-600">
-        <span className="truncate font-mono">{response.requestId}</span>
-        <span className="shrink-0">{formatTime(response.createdAt)}</span>
       </div>
     </div>
   )

@@ -13,26 +13,23 @@ interface PreviewFrameProps {
   iframeRef: RefObject<HTMLIFrameElement | null>
   project: LocalProject
   status: BridgeStatus
-  revision: number | null
   onChangeProject: () => void
-}
-
-function statusLabel(status: BridgeStatus, revision: number | null): string {
-  if (status === 'connected') return `snapshot r${revision ?? 0}`
-  if (status === 'visual') return 'visual only'
-  if (status === 'idle') return 'idle'
-  return 'probing SDK'
 }
 
 export function PreviewFrame({
   iframeRef,
   project,
   status,
-  revision,
   onChangeProject,
 }: PreviewFrameProps) {
   const src = withVibeHost(project.url, window.location.origin)
   const displayUrl = project.url.replace(/^https?:\/\//, '')
+  const dot =
+    status === 'connected'
+      ? 'bg-emerald-400/80'
+      : status === 'idle'
+        ? 'bg-slate-500'
+        : 'bg-amber-400/80'
 
   return (
     <section
@@ -46,28 +43,19 @@ export function PreviewFrame({
           <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
         </div>
         <div className="mx-2 flex h-7 min-w-0 flex-1 items-center justify-center gap-2 rounded-md bg-white/[0.04] px-3 ring-1 ring-white/[0.06]">
-          <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400/80" />
+          <span className={`h-2 w-2 shrink-0 rounded-full ${dot}`} />
           <span className="truncate font-mono text-[10px] text-slate-400">
             {displayUrl}
           </span>
         </div>
-        <span
-          className={`shrink-0 rounded-md px-1.5 py-0.5 font-mono text-[9px] ${
-            status === 'connected'
-              ? 'bg-emerald-400/10 text-emerald-300'
-              : 'bg-amber-400/10 text-amber-300'
-          }`}
-        >
-          {statusLabel(status, revision)}
-        </span>
         <button
           type="button"
           onClick={onChangeProject}
           className="btn-ghost flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-[9px]"
-          title="卸载当前项目，重新输入地址"
+          title="退出并切换模式"
         >
-          <Icon name="refresh" size={11} />
-          更换
+          <Icon name="home" size={11} />
+          切换
         </button>
       </div>
 

@@ -2,7 +2,6 @@ import { useState } from 'react'
 
 import type { ToastTone } from '../../hooks/useToast'
 import type { PromptErrorState } from '../../hooks/usePromptGeneration'
-import { PROMPT_API_BASE } from '../../lib/constants'
 import { VISUAL_REQUIRE_SCREENSHOT_MESSAGE } from '../../lib/messages'
 import type { CanvasAnnotation, PromptResponse } from '../../types/vibe'
 import { Icon } from '../ui/Icon'
@@ -59,7 +58,7 @@ export function RightPanel({
     }
     if (annotations.length === 0) {
       setTab('annotations')
-      showToast('请先在预览上添加至少一条标注。', 'info')
+      showToast('请先添加标注。', 'info')
       return
     }
     setTab('prompt')
@@ -79,23 +78,9 @@ export function RightPanel({
       }`}
     >
       <div className="flex h-full w-[400px] shrink-0 flex-col xl:w-[420px]">
-      <div className="shrink-0 border-b border-white/[0.07] px-3 pb-2.5 pt-3">
-        <div className="flex items-center justify-between px-0.5">
-          <div>
-            <h2 className="text-[12px] font-semibold tracking-tight text-slate-100">
-              Prompt 工作台
-            </h2>
-            <p className="mt-0.5 text-[9px] text-slate-600">
-              空间操作 → 结构化指令 · 仅本地会话
-            </p>
-          </div>
-          <span className="rounded-full border border-emerald-400/15 bg-emerald-400/[0.06] px-2 py-0.5 font-mono text-[8px] text-emerald-300/80">
-            LOCAL
-          </span>
-        </div>
-
+      <div className="shrink-0 border-b border-white/[0.07] p-2.5">
         <div
-          className="mt-2.5 flex rounded-lg bg-white/[0.035] p-0.5 ring-1 ring-white/[0.06]"
+          className="flex rounded-lg bg-white/[0.035] p-0.5 ring-1 ring-white/[0.06]"
           role="tablist"
           aria-label="工作台面板"
         >
@@ -178,23 +163,13 @@ export function RightPanel({
               <span className="ml-0.5 font-mono text-[9px] font-normal text-white/60">
                 {visualMode
                   ? hasScreenshot
-                    ? '视觉截图'
-                    : '需上传截图'
-                  : `${annotations.length} 条标注`}
+                    ? '视觉'
+                    : '无截图'
+                  : `${annotations.length} 条`}
               </span>
             </>
           )}
         </button>
-        <div className="mt-1.5 flex items-center justify-between px-0.5 text-[8px] text-slate-600">
-          <span>
-            {visualMode
-              ? '红笔轨迹合成图 → 视觉模型'
-              : '输出 Markdown · 不含 Diff'}
-          </span>
-          <span className="max-w-[190px] truncate font-mono">
-            {PROMPT_API_BASE.replace(/^https?:\/\//, '')}
-          </span>
-        </div>
       </div>
       </div>
     </aside>

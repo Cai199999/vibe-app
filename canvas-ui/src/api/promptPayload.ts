@@ -127,7 +127,7 @@ export function buildPromptRequest(
   )
   if (hasVisualAnnotation && !imageBase64) {
     // 仅视觉标注必须携带合成截图，否则模型没有任何界面证据。
-    throw new Error('请先上传截图或使用源码模式。')
+    throw new Error('请先上传截图。')
   }
   if (annotations.length === 0 && !imageBase64) {
     throw new Error('至少需要一条标注或一张截图才能生成 Prompt')

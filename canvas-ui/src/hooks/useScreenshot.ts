@@ -4,7 +4,6 @@ import type { ToastTone } from './useToast'
 import { normalizeScreenshot } from '../lib/screenshot'
 import {
   VISUAL_IMAGE_INVALID_MESSAGE,
-  VISUAL_MODE_STATUS_MESSAGE,
   VISUAL_SCREENSHOT_READY_MESSAGE,
 } from '../lib/messages'
 import type { ScreenshotAsset } from '../types/vibe'
@@ -24,13 +23,9 @@ export function useScreenshot(
   const activeRef = useRef(active)
   const loadSeqRef = useRef(0)
 
+  // 模式切换时由 App 显式 clear；同步 ref，阻止已失效的异步读取写入状态。
   useEffect(() => {
     activeRef.current = active
-    if (!active) {
-      loadSeqRef.current += 1
-      setScreenshot(null)
-      setLoading(false)
-    }
   }, [active])
 
   const loadFile = useCallback(
@@ -82,13 +77,6 @@ export function useScreenshot(
     window.addEventListener('paste', onPaste)
     return () => window.removeEventListener('paste', onPaste)
   }, [active, loadFile])
-
-  useEffect(() => {
-    if (!active) return
-    showToast(VISUAL_MODE_STATUS_MESSAGE, 'info')
-    // 仅在进入视觉模式时提示一次。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active])
 
   return {
     screenshot,

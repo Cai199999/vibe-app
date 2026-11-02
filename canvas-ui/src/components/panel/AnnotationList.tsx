@@ -19,57 +19,26 @@ function EmptyAnnotations({
   visualMode: boolean
   hasScreenshot: boolean
 }) {
-  const shortcuts = visualMode
-    ? [
-        ['P', hasScreenshot ? '在截图上圈画重点' : '上传截图后圈画重点'],
-        ['V', '交互浏览页面'],
-      ]
-    : [
-        ['N', '点击元素写下旁注'],
-        ['P', '圈画要修改的区域'],
-        ['D', '拖拽元素表达位置'],
-      ]
-
   return (
     <div className="flex h-full flex-col items-center justify-center px-7 pb-16 text-center">
       <div
-        className={`grid h-12 w-12 place-items-center rounded-2xl border ${
+        className={`grid h-11 w-11 place-items-center rounded-2xl border ${
           visualMode
             ? 'border-amber-400/20 bg-amber-400/[0.08] text-amber-300'
             : 'border-indigo-400/20 bg-indigo-400/[0.08] text-indigo-300'
         }`}
       >
-        <Icon name={visualMode ? 'image' : 'note'} size={20} />
+        <Icon name={visualMode ? 'image' : 'note'} size={19} />
       </div>
-      <h3 className="mt-4 text-[12px] font-semibold text-slate-200">
-        {visualMode ? '仅视觉模式' : '还没有标注'}
+      <h3 className="mt-3.5 text-[11px] font-semibold text-slate-300">
+        暂无标注
       </h3>
-      <p className="mt-1.5 max-w-[230px] text-[10px] leading-relaxed text-slate-500">
+      <p className="mt-1.5 max-w-[210px] text-[9px] leading-relaxed text-slate-600">
         {visualMode
           ? hasScreenshot
-            ? '截图已加载。按 P 在截图上圈画重点，生成时会把红笔轨迹合成进图片并调用视觉模型。'
-            : '当前页面未接入源码插件。请先上传或粘贴截图，再在截图上圈画重点。'
-          : '在左侧预览上点击元素、圈画区域或拖拽元素。每条标注都会绑定 data-source 与真实 JSX 片段。'}
-      </p>
-      <div className="mt-4 grid w-full max-w-[240px] gap-1.5">
-        {shortcuts.map(([key, label]) => (
-          <div
-            key={key}
-            className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.025] px-2.5 py-1.5 text-left"
-          >
-            <kbd className="grid h-5 w-5 place-items-center rounded border border-white/10 bg-white/[0.06] font-mono text-[9px] text-slate-400">
-              {key}
-            </kbd>
-            <span className="text-[10px] text-slate-500">{label}</span>
-          </div>
-        ))}
-      </div>
-      <p className="mt-4 text-[9px] text-slate-600">
-        {visualMode
-          ? hasScreenshot
-            ? '也可不圈画，直接提交整张截图给视觉模型。截图只在本机内存中处理。'
-            : '截图只在本机内存中合成，不会落盘或自动上传。'
-          : '生成的 Prompt 不会包含 Diff，也不会修改你的代码。'}
+            ? '按 P 在截图上圈画，也可直接生成'
+            : '先上传截图，再在截图上圈画'
+          : '在预览上点击元素、圈画或拖拽'}
       </p>
     </div>
   )
@@ -96,20 +65,17 @@ export function AnnotationList({
   return (
     <div data-testid="annotation-list" className="flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 items-center justify-between px-3 pb-2 pt-0.5">
-        <span className="text-[9px] text-slate-500">
-          共 {annotations.length} 条 ·{' '}
-          {visualMode
-            ? hasScreenshot
-              ? '截图 + 圈画可生成'
-              : '需先上传截图'
-            : '源码标注可生成 Prompt'}
+        <span className="text-[9px] text-slate-600">
+          {annotations.length} 条标注
         </span>
         <button
           type="button"
           onClick={onClear}
-          className="rounded px-1.5 py-0.5 text-[9px] text-slate-600 transition hover:bg-rose-400/10 hover:text-rose-300"
+          className="grid h-6 w-6 place-items-center rounded text-slate-600 transition hover:bg-rose-400/10 hover:text-rose-300"
+          title="清空全部标注"
+          aria-label="清空全部标注"
         >
-          清空全部
+          <Icon name="trash" size={11} />
         </button>
       </div>
 

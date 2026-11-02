@@ -90,6 +90,7 @@ function rejectPending(
 export function useIframeBridge(
   previewOrigin: string | null,
   projectKey: string | null,
+  forceVisual = false,
 ): IframeBridge {
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const [sessionToken, setSessionToken] = useState(createSessionToken)
@@ -109,7 +110,7 @@ export function useIframeBridge(
   }, [])
 
   const [status, setStatus] = useState<BridgeStatus>(
-    previewOrigin ? 'connecting' : 'idle',
+    forceVisual ? 'visual' : previewOrigin ? 'connecting' : 'idle',
   )
   const [snapshot, setSnapshot] = useState<VibeSnapshot | null>(null)
   const [lastError, setLastError] = useState<string | null>(null)
@@ -183,6 +184,14 @@ export function useIframeBridge(
     setSessionToken(nextToken)
     setSnapshot(null)
     setLastError(null)
+
+    // 截图工作区没有 iframe：直接停在仅视觉模式，跳过 3 秒握手探测。
+    if (forceVisual) {
+      fallbackRef.current = true
+      setStatus('visual')
+      return
+    }
+
     setStatus(previewOrigin ? 'connecting' : 'idle')
 
     if (!previewOrigin) return
@@ -209,7 +218,7 @@ export function useIframeBridge(
         handshakeTimerRef.current = null
       }
     }
-  }, [clearHandshakeTimer, previewOrigin, projectKey])
+  }, [clearHandshakeTimer, forceVisual, previewOrigin, projectKey])
 
   useEffect(() => {
     if (!previewOrigin) return
@@ -379,7 +388,8 @@ export function useIframeBridge(
 
   return {
     iframeRef,
-    status,
+    // forceVisual 在首帧即生效，避免入口切换到画布时短暂闪现 idle 状态。
+    status: forceVisual ? 'visual' : status,
     sessionToken,
     snapshot,
     lastError,
