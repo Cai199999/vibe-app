@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Any
 
+import httpx
 import pytest
 
 from app.config import Settings
@@ -18,6 +20,11 @@ from app.services.prompt_generator import (
 from app.services.prompt_service import PromptService
 
 SOURCE = "src/components/Button.tsx:12:5"
+TINY_PNG_DATA_URL = (
+    "data:image/png;base64,"
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk"
+    "+A8AAQUBAScY42YAAAAASUVORK5CYII="
+)
 
 
 def _request(
@@ -62,6 +69,47 @@ def _request(
             "locale": "zh-CN",
             "annotations": [annotation],
             "options": {"outputLanguage": "zh-CN", "maxPromptChars": 12000},
+        }
+    )
+
+
+def _visual_request() -> PromptGenerateRequest:
+    """仅视觉标注 + 截图，用于验证视觉路由与上下文投影。"""
+    return PromptGenerateRequest.model_validate(
+        {
+            "requestId": "req_visual123",
+            "protocolVersion": "0.1",
+            "project": {
+                "name": "demo-app",
+                "framework": "vite-react",
+                "previewOrigin": "http://127.0.0.1:5173",
+            },
+            "locale": "zh-CN",
+            "annotations": [
+                {
+                    "annotationId": "ann_visual1",
+                    "type": "visual-draw",
+                    "intent": "把红圈里的搜索框加宽",
+                    "createdAt": "2026-11-02T10:00:00Z",
+                    "visual": {
+                        "kind": "draw",
+                        "points": [{"x": 10, "y": 20}],
+                        "pointCount": 1,
+                        "downsampledFrom": 30,
+                        "bbox": {
+                            "x": 10,
+                            "y": 20,
+                            "width": 200,
+                            "height": 60,
+                        },
+                        "stroke": {"color": "#ef4444", "width": 6},
+                        "relatedSources": [],
+                        "spatialSummary": "红色轨迹圈住顶部搜索框。",
+                    },
+                }
+            ],
+            "options": {"outputLanguage": "zh-CN", "maxPromptChars": 12000},
+            "image_base64": TINY_PNG_DATA_URL,
         }
     )
 
@@ -167,3 +215,71 @@ def test_service_truncates_prompt_with_warning() -> None:
     assert result.prompt.char_count <= 1000
     assert result.status == "partial"
     assert [warning.code for warning in result.warnings] == ["PROMPT_TRUNCATED"]
+
+
+def test_visual_context_keeps_image_and_spatial_summary() -> None:
+    context = build_prompt_context(_visual_request(), include_image=True)
+    projected = context["annotations"][0]
+
+    assert projected["target"] is None
+    assert projected["jsxSnippet"] is None
+    assert projected["visual"]["spatialSummary"] == "红色轨迹圈住顶部搜索框。"
+    assert "points" not in projected["visual"]
+    assert context["imageDataUrl"] == TINY_PNG_DATA_URL
+
+
+def test_deepseek_image_route_uses_vision_model_and_red_prompt() -> None:
+    """验证多模态请求：deepseek-flash、image_url 与红笔系统提示词。"""
+    captured: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["payload"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": (
+                                "## 修改任务\n"
+                                "针对红圈标记的搜索框加宽，并保持现有布局。\n"
+                            )
+                        }
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 120,
+                    "completion_tokens": 30,
+                    "total_tokens": 150,
+                },
+            },
+        )
+
+    settings = Settings(
+        prompt_provider="deepseek",
+        deepseek_api_key="test-key",
+        deepseek_vision_model="deepseek-flash",
+    )
+    generator = DeepSeekPromptGenerator(
+        settings,
+        transport=httpx.MockTransport(handler),
+    )
+    context = build_prompt_context(_visual_request(), include_image=True)
+
+    result = asyncio.run(generator.generate(context))
+
+    payload = captured["payload"]
+    assert payload["model"] == "deepseek-flash"
+    assert result.model == "deepseek-flash"
+    assert "红色手绘轨迹" in payload["messages"][0]["content"]
+    user_content = payload["messages"][1]["content"]
+    assert isinstance(user_content, list)
+    assert any(
+        part.get("type") == "image_url"
+        and part["image_url"]["url"] == TINY_PNG_DATA_URL
+        for part in user_content
+    )
+    text_part = next(part for part in user_content if part["type"] == "text")
+    assert "imageDataUrl" not in text_part["text"]
+    assert "红色轨迹圈住顶部搜索框" in text_part["text"]
+    assert "搜索框" in result.content

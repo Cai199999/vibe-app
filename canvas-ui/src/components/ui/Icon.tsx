@@ -23,6 +23,7 @@ export type IconName =
   | 'refresh'
   | 'code'
   | 'file'
+  | 'image'
 
 const CONTENT: Record<IconName, ReactNode> = {
   sparkles: (
@@ -125,6 +126,13 @@ const CONTENT: Record<IconName, ReactNode> = {
     <>
       <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
       <path d="M14 2v6h6" />
+    </>
+  ),
+  image: (
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <circle cx="8.5" cy="9.5" r="1.5" />
+      <path d="M21 15l-5-5L5 20" />
     </>
   ),
 }

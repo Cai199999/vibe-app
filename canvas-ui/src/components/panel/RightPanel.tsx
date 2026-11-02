@@ -3,7 +3,7 @@ import { useState } from 'react'
 import type { ToastTone } from '../../hooks/useToast'
 import type { PromptErrorState } from '../../hooks/usePromptGeneration'
 import { PROMPT_API_BASE } from '../../lib/constants'
-import { VISUAL_GENERATE_BLOCKED_MESSAGE } from '../../lib/messages'
+import { VISUAL_REQUIRE_SCREENSHOT_MESSAGE } from '../../lib/messages'
 import type { CanvasAnnotation, PromptResponse } from '../../types/vibe'
 import { Icon } from '../ui/Icon'
 import { AnnotationList } from './AnnotationList'
@@ -15,8 +15,9 @@ interface RightPanelProps {
   collapsed: boolean
   annotations: CanvasAnnotation[]
   selectedId: string | null
-  /** true 时不允许生成 Prompt，只保留本地视觉标注。 */
+  /** 仅视觉模式：必须已有截图才能生成。 */
   visualMode: boolean
+  hasScreenshot: boolean
   loading: boolean
   error: PromptErrorState | null
   response: PromptResponse | null
@@ -32,6 +33,7 @@ export function RightPanel({
   annotations,
   selectedId,
   visualMode,
+  hasScreenshot,
   loading,
   error,
   response,
@@ -44,10 +46,15 @@ export function RightPanel({
   const [tab, setTab] = useState<Tab>('annotations')
 
   const handleGenerate = () => {
-    // 仅视觉模式的提示优先于“没有标注”，确保用户能理解降级原因。
     if (visualMode) {
+      // 视觉模式允许 0 条标注（仅凭截图），但必须先有截图。
+      if (!hasScreenshot) {
+        setTab('annotations')
+        showToast(VISUAL_REQUIRE_SCREENSHOT_MESSAGE, 'error')
+        return
+      }
       setTab('prompt')
-      showToast(VISUAL_GENERATE_BLOCKED_MESSAGE, 'error')
+      void onGenerate()
       return
     }
     if (annotations.length === 0) {
@@ -135,6 +142,7 @@ export function RightPanel({
             annotations={annotations}
             selectedId={selectedId}
             visualMode={visualMode}
+            hasScreenshot={hasScreenshot}
             onSelect={onSelect}
             onRemove={onRemove}
             onClear={onClear}
@@ -168,13 +176,21 @@ export function RightPanel({
               <Icon name="sparkles" size={14} />
               生成指令
               <span className="ml-0.5 font-mono text-[9px] font-normal text-white/60">
-                {annotations.length} 条标注
+                {visualMode
+                  ? hasScreenshot
+                    ? '视觉截图'
+                    : '需上传截图'
+                  : `${annotations.length} 条标注`}
               </span>
             </>
           )}
         </button>
         <div className="mt-1.5 flex items-center justify-between px-0.5 text-[8px] text-slate-600">
-          <span>输出 Markdown · 不含 Diff</span>
+          <span>
+            {visualMode
+              ? '红笔轨迹合成图 → 视觉模型'
+              : '输出 Markdown · 不含 Diff'}
+          </span>
           <span className="max-w-[190px] truncate font-mono">
             {PROMPT_API_BASE.replace(/^https?:\/\//, '')}
           </span>

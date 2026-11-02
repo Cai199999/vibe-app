@@ -17,6 +17,7 @@ from typing import Any, Literal
 from urllib.parse import urlparse
 
 from pydantic import (
+    AliasChoices,
     BaseModel,
     ConfigDict,
     Field,
@@ -45,6 +46,11 @@ REQUEST_ID_PATTERN = re.compile(r"^req_[A-Za-z0-9_-]{1,64}$")
 PROTOCOL_MAJOR = "0"
 
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+# 顶层视觉截图字段：允许前端直接使用 data URL，服务端只接受 base64 图片。
+IMAGE_DATA_URL_PATTERN = re.compile(
+    r"^data:(image/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$"
+)
 
 
 class CamelModel(BaseModel):
@@ -295,10 +301,14 @@ class Drag(CamelModel):
 
 
 class Annotation(CamelModel):
-    """单条标注：旁注 / 圈画 / 拖拽。"""
+    """单条标注：旁注 / 圈画 / 拖拽 / 仅视觉圈画。
+
+    visual-draw 没有 data-source 与 JSX 片段，只允许在携带顶层截图
+    image_base64 的视觉请求中出现；源码模式仍执行 Q9 / Q14 硬校验。
+    """
 
     annotation_id: str
-    type: Literal["note", "draw", "drag"]
+    type: Literal["note", "draw", "drag", "visual-draw"]
     intent: str = Field(min_length=1, max_length=2000)
     created_at: datetime
     target: Target | None = None
@@ -315,7 +325,16 @@ class Annotation(CamelModel):
 
     @model_validator(mode="after")
     def _validate_annotation(self) -> "Annotation":
-        """执行 Q9 / Q14 硬校验与类型专属字段校验。"""
+        """执行源码硬校验与类型专属字段校验。"""
+        if self.type == "visual-draw":
+            if self.visual is None:
+                raise ValueError("visual-draw 标注必须提供 visual")
+            if self.target is not None or self.jsx_snippet is not None:
+                raise ValueError("visual-draw 标注不能携带源码目标或 JSX 片段")
+            if self.drag is not None:
+                raise ValueError("visual-draw 标注不能提供 drag")
+            return self
+
         if self.target is None:
             raise PydanticCustomError(
                 "source_required",
@@ -356,16 +375,24 @@ class GenerateOptions(CamelModel):
 
 
 class PromptGenerateRequest(CamelModel):
-    """POST /api/v1/prompts/generate 请求体。"""
+    """POST /api/v1/prompts/generate 请求体。
+
+    image_base64 是仅视觉模式的可选截图（前端已把红笔轨迹合成进图片）。
+    显式兼容 image_base64 / imageBase64 两种写法，方便前端与文档渐进迁移。
+    """
 
     request_id: str
     protocol_version: str = Field(min_length=1, max_length=16)
     project: ProjectInfo
     locale: Literal["zh-CN", "en"] = "zh-CN"
     annotations: list[Annotation] = Field(
-        min_length=1, max_length=MAX_ANNOTATIONS_PER_REQUEST
+        default_factory=list, max_length=MAX_ANNOTATIONS_PER_REQUEST
     )
     options: GenerateOptions = Field(default_factory=GenerateOptions)
+    image_base64: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("image_base64", "imageBase64"),
+    )
 
     @field_validator("request_id")
     @classmethod
@@ -385,12 +412,46 @@ class PromptGenerateRequest(CamelModel):
             raise ValueError("protocolVersion 主版本不兼容")
         return value
 
+    @field_validator("image_base64")
+    @classmethod
+    def _validate_image_base64(cls, value: str | None) -> str | None:
+        """校验顶层视觉截图的大小、MIME 与 base64 合法性。"""
+        if value is None:
+            return None
+
+        match = IMAGE_DATA_URL_PATTERN.fullmatch(value)
+        if not match:
+            raise ValueError("image_base64 必须是 png / jpeg / webp 的 base64 data URL")
+
+        try:
+            decoded = base64.b64decode(match.group(2), validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError("image_base64 不是合法的 base64 图片") from exc
+
+        if len(decoded) > MAX_IMAGE_BYTES:
+            raise PydanticCustomError(
+                "image_too_large",
+                f"截图不能超过 {MAX_IMAGE_BYTES} 字节。",
+            )
+        return value
+
     @model_validator(mode="after")
     def _validate_annotations(self) -> "PromptGenerateRequest":
-        """标注 ID 不允许重复，避免结果与目标对应混乱。"""
+        """校验 ID 去重、视觉截图依赖与最小请求内容。"""
         ids = [item.annotation_id for item in self.annotations]
         if len(ids) != len(set(ids)):
             raise ValueError("annotationId 不能重复")
+
+        if not self.annotations and not self.image_base64:
+            raise ValueError("至少需要一条标注或一张截图")
+
+        # 仅视觉标注没有源码锚点，必须由截图提供可判读的界面证据。
+        if any(item.type == "visual-draw" for item in self.annotations):
+            if not self.image_base64:
+                raise PydanticCustomError(
+                    "source_required",
+                    "仅视觉标注必须附带 image_base64 截图。",
+                )
         return self
 
 

@@ -142,6 +142,11 @@ class PromptService:
 
     def _validate_annotation_limits(self, annotation: Annotation) -> None:
         """逐条校验文本、邻居、片段、图片与点位上限。"""
+        # 仅视觉圈画没有源码目标与 JSX 片段，只校验视觉数据。
+        if annotation.type == "visual-draw":
+            self._validate_visual_limits(annotation)
+            return
+
         target = annotation.target
         assert target is not None  # Schema 已校验
 
@@ -173,6 +178,10 @@ class PromptService:
                 "JSX 片段字节数超过服务端上限。",
             )
 
+        self._validate_visual_limits(annotation)
+
+    def _validate_visual_limits(self, annotation: Annotation) -> None:
+        """校验手绘关键点与旧版内嵌图片上限。"""
         visual = annotation.visual
         if visual is not None:
             if visual.point_count > self.settings.max_points_per_stroke:
@@ -238,7 +247,9 @@ class PromptService:
         """执行一次完整的 Prompt 生成。"""
         self._validate_limits(request)
 
-        include_image = self.generator.supports_images
+        # 顶层合成图是视觉模式的显式输入，即使使用本地 Mock 也要
+        # 进入视觉分支；旧版 visual.image 仍受模型能力开关控制。
+        include_image = self.generator.supports_images or bool(request.image_base64)
         warnings = self._collect_warnings(request, include_image)
         context = build_prompt_context(request, include_image=include_image)
 

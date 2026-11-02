@@ -8,14 +8,17 @@ import { Toast } from './components/ui/Toast'
 import { useAnnotations } from './hooks/useAnnotations'
 import { useIframeBridge } from './hooks/useIframeBridge'
 import { usePromptGeneration } from './hooks/usePromptGeneration'
+import { useScreenshot } from './hooks/useScreenshot'
 import { useToast } from './hooks/useToast'
-import { VISUAL_GENERATE_BLOCKED_MESSAGE } from './lib/messages'
+import { composeScreenshotWithDrawings } from './lib/screenshot'
+import { VISUAL_REQUIRE_SCREENSHOT_MESSAGE } from './lib/messages'
 import type { LocalProject, Mode } from './types/vibe'
 
 function App() {
   const [project, setProject] = useState<LocalProject | null>(null)
   const [mode, setMode] = useState<Mode>('note')
   const [panelOpen, setPanelOpen] = useState(true)
+  const [preparing, setPreparing] = useState(false)
 
   const bridge = useIframeBridge(
     project?.origin ?? null,
@@ -32,6 +35,13 @@ function App() {
   } = useAnnotations()
   const prompt = usePromptGeneration()
   const { toast, show } = useToast()
+  const visualMode = bridge.status === 'visual'
+  const {
+    screenshot,
+    loading: screenshotLoading,
+    loadFile: loadScreenshot,
+    clear: clearScreenshot,
+  } = useScreenshot(visualMode, show)
 
   const { reset: resetPrompt, generate } = prompt
 
@@ -40,38 +50,72 @@ function App() {
     resetPrompt()
   }, [annotations, resetPrompt])
 
-  // 降级后旧 Prompt 不再可信，立即清空。
+  // 降级或更换截图后，旧 Prompt 不再可信，立即清空。
   useEffect(() => {
-    if (bridge.status === 'visual') resetPrompt()
-  }, [bridge.status, resetPrompt])
+    resetPrompt()
+  }, [bridge.status, screenshot?.dataUrl, resetPrompt])
 
   const handleLoadProject = useCallback(
     (next: LocalProject) => {
       setProject(next)
-      // 不同项目的 data-source 与源码片段不可混用，切换项目必须清空标注。
+      // 不同项目的 data-source、截图与源码片段不可混用。
       clear()
+      clearScreenshot()
       resetPrompt()
       show(`已加载 ${next.origin}，等待 SDK 握手…`, 'info')
     },
-    [clear, resetPrompt, show],
+    [clear, clearScreenshot, resetPrompt, show],
   )
 
   const handleChangeProject = useCallback(() => {
     setProject(null)
     clear()
+    clearScreenshot()
     resetPrompt()
     show('已卸载当前项目，可重新输入本地地址。', 'info')
-  }, [clear, resetPrompt, show])
+  }, [clear, clearScreenshot, resetPrompt, show])
 
   const handleGenerate = useCallback(async () => {
     if (!project) {
       show('请先加载本地项目。', 'info')
       return
     }
-    if (bridge.status === 'visual') {
-      show(VISUAL_GENERATE_BLOCKED_MESSAGE, 'error')
+
+    if (visualMode) {
+      if (!screenshot) {
+        show(VISUAL_REQUIRE_SCREENSHOT_MESSAGE, 'error')
+        return
+      }
+      setPreparing(true)
+      try {
+        // 在浏览器内把原图与红笔轨迹合成为一张 PNG，再交给后端。
+        const imageBase64 = await composeScreenshotWithDrawings(
+          screenshot,
+          annotations,
+        )
+        const response = await generate(
+          annotations,
+          bridge.sessionToken,
+          project,
+          imageBase64,
+        )
+        if (response) {
+          show(
+            `已用视觉截图生成 ${response.prompt.charCount.toLocaleString()} 字符 Prompt`,
+            'success',
+          )
+        }
+      } catch (error) {
+        show(
+          error instanceof Error ? error.message : '截图合成失败，请重试。',
+          'error',
+        )
+      } finally {
+        setPreparing(false)
+      }
       return
     }
+
     if (bridge.status !== 'connected') {
       show('正在探测源码插件，请稍候；3 秒后会给出结果。', 'info')
       return
@@ -97,7 +141,9 @@ function App() {
     bridge.status,
     generate,
     project,
+    screenshot,
     show,
+    visualMode,
   ])
 
   const elementCount =
@@ -115,12 +161,17 @@ function App() {
         previewOrigin={project?.origin ?? null}
         projectName={project?.name ?? null}
         elementCount={bridge.snapshot ? elementCount : null}
+        screenshot={screenshot}
+        screenshotLoading={screenshotLoading}
+        onUploadScreenshot={(file) => void loadScreenshot(file)}
+        onRemoveScreenshot={clearScreenshot}
       />
 
       <div className="relative flex min-h-0 flex-1">
         <CanvasStage
           bridge={bridge}
           project={project}
+          screenshot={screenshot}
           onLoadProject={handleLoadProject}
           onChangeProject={handleChangeProject}
           annotations={annotations}
@@ -137,8 +188,9 @@ function App() {
           collapsed={!panelOpen}
           annotations={annotations}
           selectedId={selectedId}
-          visualMode={bridge.status === 'visual'}
-          loading={prompt.loading}
+          visualMode={visualMode}
+          hasScreenshot={Boolean(screenshot)}
+          loading={prompt.loading || preparing}
           error={prompt.error}
           response={prompt.response}
           onSelect={select}

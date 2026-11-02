@@ -6,17 +6,18 @@ import {
 } from '../lib/constants'
 import { downsamplePoints, round, roundPoint, roundRect } from '../lib/geometry'
 import { createRequestId } from '../lib/ids'
-import { VISUAL_GENERATE_BLOCKED_MESSAGE } from '../lib/messages'
 import type {
   ApiAnnotation,
   ApiTarget,
   CanvasAnnotation,
-  DrawAnnotation,
   DragAnnotation,
+  DrawAnnotation,
+  DrawVisual,
   LocalProject,
   Neighbor,
   PromptGenerateRequest,
   SourceAnnotation,
+  VisualDrawAnnotation,
   WorldTarget,
 } from '../types/vibe'
 
@@ -47,18 +48,22 @@ function toApiTarget(target: WorldTarget): ApiTarget {
   }
 }
 
-function drawPayload(annotation: DrawAnnotation) {
-  const points = downsamplePoints(annotation.visual.rawPoints, MAX_KEY_POINTS)
+function visualPayload(visual: DrawVisual) {
+  const points = downsamplePoints(visual.rawPoints, MAX_KEY_POINTS)
   return {
     kind: 'draw' as const,
     points,
     pointCount: points.length,
-    downsampledFrom: annotation.visual.rawPoints.length,
-    bbox: roundRect(annotation.visual.bbox),
-    stroke: { color: '#e879f9', width: 2.4 },
-    relatedSources: annotation.visual.relatedSources.slice(0, 20),
-    spatialSummary: annotation.visual.spatialSummary.slice(0, 500),
+    downsampledFrom: visual.rawPoints.length,
+    bbox: roundRect(visual.bbox),
+    stroke: { color: '#ef4444', width: 6 },
+    relatedSources: visual.relatedSources.slice(0, 20),
+    spatialSummary: visual.spatialSummary.slice(0, 500),
   }
+}
+
+function drawPayload(annotation: DrawAnnotation) {
+  return visualPayload(annotation.visual)
 }
 
 function dragPayload(annotation: DragAnnotation) {
@@ -78,8 +83,10 @@ function dragPayload(annotation: DragAnnotation) {
   }
 }
 
-export function toApiAnnotation(annotation: SourceAnnotation): ApiAnnotation {
-  const base: ApiAnnotation = {
+export function toApiAnnotation(
+  annotation: SourceAnnotation,
+): ApiAnnotation {
+  const base = {
     annotationId: annotation.id,
     type: annotation.type,
     // 服务端要求 1–2000 字符；空意图在前端已阻止。
@@ -90,28 +97,40 @@ export function toApiAnnotation(annotation: SourceAnnotation): ApiAnnotation {
   }
 
   if (annotation.type === 'draw') {
-    base.visual = drawPayload(annotation)
+    return { ...base, visual: drawPayload(annotation) }
   }
   if (annotation.type === 'drag') {
-    base.drag = dragPayload(annotation)
+    return { ...base, drag: dragPayload(annotation) }
   }
   return base
+}
+
+export function toApiVisualAnnotation(
+  annotation: VisualDrawAnnotation,
+): ApiAnnotation {
+  return {
+    annotationId: annotation.id,
+    type: 'visual-draw',
+    intent: annotation.intent.trim().slice(0, 2000),
+    createdAt: annotation.createdAt,
+    visual: visualPayload(annotation.visual),
+  }
 }
 
 export function buildPromptRequest(
   annotations: CanvasAnnotation[],
   project: LocalProject,
+  imageBase64?: string,
 ): PromptGenerateRequest {
-  if (annotations.length === 0) {
-    throw new Error('至少需要一条标注才能生成 Prompt')
-  }
-  const sourceAnnotations = annotations.filter(
-    (annotation): annotation is SourceAnnotation =>
-      annotation.type !== 'visual-draw',
+  const hasVisualAnnotation = annotations.some(
+    (annotation) => annotation.type === 'visual-draw',
   )
-  if (sourceAnnotations.length !== annotations.length) {
-    // 视觉标注没有 data-source，必须在进入 L3 前硬拦截。
-    throw new Error(VISUAL_GENERATE_BLOCKED_MESSAGE)
+  if (hasVisualAnnotation && !imageBase64) {
+    // 仅视觉标注必须携带合成截图，否则模型没有任何界面证据。
+    throw new Error('请先上传截图或使用源码模式。')
+  }
+  if (annotations.length === 0 && !imageBase64) {
+    throw new Error('至少需要一条标注或一张截图才能生成 Prompt')
   }
 
   return {
@@ -123,10 +142,15 @@ export function buildPromptRequest(
       previewOrigin: project.origin,
     },
     locale: 'zh-CN',
-    annotations: sourceAnnotations.map(toApiAnnotation),
+    annotations: annotations.map((annotation) =>
+      annotation.type === 'visual-draw'
+        ? toApiVisualAnnotation(annotation)
+        : toApiAnnotation(annotation),
+    ),
     options: {
       outputLanguage: 'zh-CN',
       maxPromptChars: MAX_PROMPT_CHARS,
     },
+    ...(imageBase64 ? { image_base64: imageBase64 } : {}),
   }
 }

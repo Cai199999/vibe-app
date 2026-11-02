@@ -34,6 +34,7 @@ import type {
   Mode,
   Point,
   Rect,
+  ScreenshotAsset,
   WorldTarget,
 } from '../../types/vibe'
 import type { IframeBridge } from '../../hooks/useIframeBridge'
@@ -44,6 +45,7 @@ import { ComposerPopover } from './ComposerPopover'
 import { HoverBox } from './HoverBox'
 import { PreviewFrame } from './PreviewFrame'
 import { ProjectLauncher } from './ProjectLauncher'
+import { ScreenshotLayer } from './ScreenshotLayer'
 import { Icon } from '../ui/Icon'
 
 type Gesture =
@@ -124,6 +126,7 @@ function defaultTargetSummary(target: WorldTarget): string {
 interface CanvasStageProps {
   bridge: IframeBridge
   project: LocalProject | null
+  screenshot: ScreenshotAsset | null
   onLoadProject: (project: LocalProject) => void
   onChangeProject: () => void
   annotations: CanvasAnnotation[]
@@ -139,6 +142,7 @@ interface CanvasStageProps {
 export function CanvasStage({
   bridge,
   project,
+  screenshot,
   onLoadProject,
   onChangeProject,
   annotations,
@@ -460,9 +464,11 @@ export function CanvasStage({
           bbox: roundRect(bbox),
           relatedSources: [],
           relatedTargets: [],
-          spatialSummary: `仅视觉模式手绘区域，包围盒 ${Math.round(
-            bbox.width,
-          )}×${Math.round(bbox.height)} 像素；未解析源码元素。`,
+          spatialSummary: `${
+            screenshot ? '基于用户上传截图' : '仅视觉模式'
+          }手绘区域，包围盒 ${Math.round(bbox.width)}×${Math.round(
+            bbox.height,
+          )} 像素；未解析源码元素。`,
         }
         openComposer({
           type: 'draw',
@@ -520,7 +526,15 @@ export function CanvasStage({
         showError(error, '圈画目标解析失败。')
       }
     },
-    [bridge, clearLive, getSnippet, openComposer, showError, showToast],
+    [
+      bridge,
+      clearLive,
+      getSnippet,
+      openComposer,
+      screenshot,
+      showError,
+      showToast,
+    ],
   )
 
   const finishDrag = useCallback(
@@ -972,6 +986,10 @@ export function CanvasStage({
             onChangeProject={onChangeProject}
           />
 
+          {bridge.status === 'visual' && screenshot && (
+            <ScreenshotLayer screenshot={screenshot} />
+          )}
+
         <div
           data-testid="preview-capture"
           className="absolute left-0 z-10"
@@ -1015,7 +1033,9 @@ export function CanvasStage({
             <span>{MODE_LABEL[mode]}</span>
             <span className="hidden text-slate-600 sm:inline">
               {bridge.status === 'visual'
-                ? '仅视觉模式：点击元素不可用；按 P 圈画，生成 Prompt 需启用 Vite 插件。'
+                ? screenshot
+                  ? '截图标注：按 P 圈画，点击生成会合成红笔轨迹并调用视觉模型。'
+                  : '仅视觉模式：点击元素不可用；先上传截图，再按 P 圈画。'
                 : MODE_HINT[mode]}
             </span>
           </div>

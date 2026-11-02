@@ -134,6 +134,17 @@ export interface LocalProject {
   loadedAt: string
 }
 
+/** 用户手动上传 / 粘贴的截图，已在前端规范化到接口上限内。 */
+export interface ScreenshotAsset {
+  /** 统一编码为 PNG data URL，便于 canvas 合成与后端校验。 */
+  dataUrl: string
+  width: number
+  height: number
+  /** PNG 解码后的实际字节数。 */
+  bytes: number
+  name: string
+}
+
 export interface DrawVisual {
   rawPoints: Point[]
   bbox: Rect
@@ -247,16 +258,28 @@ export interface ApiDrag {
   spatialSummary: string
 }
 
-export interface ApiAnnotation {
+interface ApiAnnotationBase {
   annotationId: string
-  type: AnnotationType
   intent: string
   createdAt: string
+}
+
+/** 源码模式标注：必须带 target 与 JSX 片段。 */
+export interface ApiSourceAnnotation extends ApiAnnotationBase {
+  type: AnnotationType
   target: ApiTarget
   jsxSnippet: JSXSnippet
   visual?: ApiVisual
   drag?: ApiDrag
 }
+
+/** 仅视觉圈画：没有 target / JSX 片段，必须与顶层截图一起提交。 */
+export interface ApiVisualAnnotation extends ApiAnnotationBase {
+  type: 'visual-draw'
+  visual: ApiVisual
+}
+
+export type ApiAnnotation = ApiSourceAnnotation | ApiVisualAnnotation
 
 export interface GenerateOptions {
   outputLanguage: 'zh-CN' | 'en'
@@ -274,6 +297,8 @@ export interface PromptGenerateRequest {
   locale: 'zh-CN' | 'en'
   annotations: ApiAnnotation[]
   options: GenerateOptions
+  /** 仅视觉模式：前端已合成红笔轨迹的 PNG data URL。 */
+  image_base64?: string
 }
 
 export interface PromptContent {

@@ -111,7 +111,7 @@ export function ComposerPopover({
       <div className="mt-2 flex items-center justify-between gap-2">
         <span className="text-[9px] text-slate-600">
           {draft.visualOnly
-            ? '仅视觉标注 · 不可生成 Prompt · '
+            ? '仅视觉标注 · 上传截图后可生成 · '
             : noteRequired
               ? '旁注内容必填 · '
               : '可选补充意图 · '}

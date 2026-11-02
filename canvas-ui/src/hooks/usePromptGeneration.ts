@@ -32,10 +32,15 @@ export function usePromptGeneration() {
       annotations: CanvasAnnotation[],
       sessionToken: string,
       project: LocalProject,
+      imageBase64?: string,
     ): Promise<PromptResponse | null> => {
       setState({ loading: true, error: null, response: null })
       try {
-        const payload = buildPromptRequest(annotations, project)
+        const payload = buildPromptRequest(
+          annotations,
+          project,
+          imageBase64,
+        )
         const response = await generatePrompt(payload, sessionToken)
         setState({ loading: false, error: null, response })
         return response

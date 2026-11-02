@@ -13,15 +13,17 @@ from typing import Any
 from app.schemas.prompt import Annotation, PromptGenerateRequest
 
 
-def _target_payload(annotation: Annotation) -> dict[str, Any]:
+def _target_payload(annotation: Annotation) -> dict[str, Any] | None:
     """目标投影：保留定位、文本、布局与邻居，不含原始 DOM。"""
-    assert annotation.target is not None  # Schema 已硬校验
+    if annotation.target is None:
+        return None
     return annotation.target.model_dump(by_alias=True, exclude_none=True)
 
 
-def _snippet_payload(annotation: Annotation) -> dict[str, Any]:
+def _snippet_payload(annotation: Annotation) -> dict[str, Any] | None:
     """片段投影：只包含选中目标的精简 JSX。"""
-    assert annotation.jsx_snippet is not None  # Schema 已硬校验
+    if annotation.jsx_snippet is None:
+        return None
     return annotation.jsx_snippet.model_dump(by_alias=True, exclude_none=True)
 
 
@@ -73,10 +75,15 @@ def build_prompt_context(
             }
         )
 
-    return {
+    context: dict[str, Any] = {
         "protocolVersion": request.protocol_version,
         "project": request.project.model_dump(by_alias=True),
         "locale": request.locale,
         "options": request.options.model_dump(by_alias=True),
         "annotations": annotations,
     }
+    # 顶层截图只在本次调用内存在；生成器会把它从文本 JSON 中剥离，
+    # 以 image_url 形式交给多模态模型，避免重复传输超大 base64。
+    if include_image and request.image_base64:
+        context["imageDataUrl"] = request.image_base64
+    return context

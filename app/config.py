@@ -53,10 +53,11 @@ class Settings(BaseSettings):
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-chat"
+    # 截图 / 红笔轨迹合成图走多模态模型；文本路径继续使用 DEEPSEEK_MODEL。
+    deepseek_vision_model: str = "deepseek-flash"
     deepseek_timeout_seconds: float = 30.0
     deepseek_max_tokens: int = 2000
     deepseek_temperature: float = 0.2
-    deepseek_multimodal: bool = False
 
     # ---- 接口上限（与 03.API接口设计.md 对齐） ----
     max_snapshot_elements: int = 200

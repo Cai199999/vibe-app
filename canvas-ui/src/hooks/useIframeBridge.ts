@@ -59,7 +59,7 @@ const HANDSHAKE_TIMEOUT_MS = 3000
 
 const VISUAL_FALLBACK_DETAIL =
   `${VISUAL_MODE_STATUS_MESSAGE}` +
-  '点击元素不可用，可使用圈画；生成 Prompt 需启用 @vibe/vite-plugin。'
+  '点击元素不可用；请上传或粘贴截图后圈画，使用视觉模型生成 Prompt。'
 
 function protocolMajor(version: unknown): string {
   return typeof version === 'string' ? version.split('.')[0] : ''

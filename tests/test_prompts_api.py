@@ -16,6 +16,7 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
+from app.config import Settings, get_settings
 from app.main import app
 
 client = TestClient(app)
@@ -88,7 +89,7 @@ def _payload(annotations: list[dict[str, Any]] | None = None) -> dict[str, Any]:
             "previewOrigin": "http://127.0.0.1:5173",
         },
         "locale": "zh-CN",
-        "annotations": annotations or [_annotation()],
+        "annotations": [_annotation()] if annotations is None else annotations,
         "options": {"outputLanguage": "zh-CN", "maxPromptChars": 12000},
     }
 
@@ -119,6 +120,34 @@ def _tiny_image() -> dict[str, Any]:
     }
 
 
+# 1×1 PNG，用于合法顶层截图校验。
+TINY_PNG_DATA_URL = (
+    "data:image/png;base64,"
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk"
+    "+A8AAQUBAScY42YAAAAASUVORK5CYII="
+)
+
+
+def _visual_annotation() -> dict[str, Any]:
+    """仅视觉圈画：没有 target / jsxSnippet，只带空间摘要。"""
+    return {
+        "annotationId": "ann_visual1",
+        "type": "visual-draw",
+        "intent": "把红圈里的搜索框加宽",
+        "createdAt": "2026-11-02T10:00:00Z",
+        "visual": {
+            "kind": "draw",
+            "points": [{"x": 100, "y": 120}],
+            "pointCount": 1,
+            "downsampledFrom": 80,
+            "bbox": {"x": 80, "y": 100, "width": 200, "height": 60},
+            "stroke": {"color": "#ef4444", "width": 6},
+            "relatedSources": [],
+            "spatialSummary": "红色轨迹圈住顶部搜索框，包围盒 200×60 像素。",
+        },
+    }
+
+
 def _post(payload: dict[str, Any], headers: dict[str, str]) -> Any:
     return client.post("/api/v1/prompts/generate", json=payload, headers=headers)
 
@@ -146,6 +175,7 @@ def test_capabilities_declares_limits_and_features() -> None:
     assert body["model"] == {
         "provider": "mock",
         "name": "mock-prompt-v1",
+        "visionModel": None,
         "multimodal": False,
     }
     limits = body["limits"]
@@ -165,8 +195,27 @@ def test_capabilities_declares_limits_and_features() -> None:
     assert features["snippetRequired"] is True
     assert features["serverHistory"] is False
     assert features["streaming"] is False
-    assert features["imageInput"] is False
+    assert features["imageInput"] is True
+    assert features["visualOnlyAnnotations"] is True
     assert features["snapshotFiltersDisplayNone"] is True
+
+
+def test_capabilities_declares_vision_model_for_deepseek() -> None:
+    """DeepSeek 模式应声明真实多模态模型，方便前端对齐。"""
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        prompt_provider="deepseek",
+        deepseek_api_key="test-key",
+        deepseek_vision_model="deepseek-flash",
+    )
+    try:
+        body = client.get("/api/v1/capabilities").json()
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert body["model"]["provider"] == "deepseek"
+    assert body["model"]["visionModel"] == "deepseek-flash"
+    assert body["model"]["multimodal"] is True
+    assert body["features"]["imageInput"] is True
 
 
 # ---------------------------------------------------------------- 成功路径
@@ -220,6 +269,55 @@ def test_image_ignored_warning_when_model_has_no_vision() -> None:
     assert [item["code"] for item in body["warnings"]] == [
         "IMAGE_IGNORED_MODEL_NO_VISION"
     ]
+
+
+def test_visual_annotation_with_image_uses_visual_mock() -> None:
+    """顶层截图 + visual-draw 允许提交，Mock 走视觉分支。"""
+    payload = _payload([_visual_annotation()])
+    payload["image_base64"] = TINY_PNG_DATA_URL
+
+    resp = _post(payload, _headers())
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["model"] == {
+        "provider": "mock",
+        "name": "mock-vision-v1",
+    }
+    content = body["prompt"]["content"]
+    assert "红色" in content
+    assert "把红圈里的搜索框加宽" in content
+    assert "包围盒 200×60" in content
+    assert body["prompt"]["targetFiles"] == []
+
+
+def test_visual_annotation_without_image_is_rejected() -> None:
+    """仅视觉标注没有截图时，后端仍要硬阻断。"""
+    resp = _post(_payload([_visual_annotation()]), _headers())
+
+    assert resp.status_code == 400, resp.text
+    assert resp.json()["error"]["code"] == "SOURCE_REQUIRED"
+
+
+def test_visual_request_can_contain_only_image() -> None:
+    """上传截图后即使未圈画，也允许生成通用视觉 Prompt。"""
+    payload = _payload([])
+    payload["image_base64"] = TINY_PNG_DATA_URL
+
+    resp = _post(payload, _headers())
+
+    assert resp.status_code == 200, resp.text
+    assert "红色" in resp.json()["prompt"]["content"]
+
+
+def test_invalid_image_base64_is_rejected() -> None:
+    payload = _payload([_visual_annotation()])
+    payload["image_base64"] = "data:image/png;base64,not-valid-***"
+
+    resp = _post(payload, _headers())
+
+    assert resp.status_code == 400, resp.text
+    assert resp.json()["error"]["code"] == "VALIDATION_FAILED"
 
 
 # ---------------------------------------------------------------- 硬校验

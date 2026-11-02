@@ -15,6 +15,10 @@ export const MAX_SNIPPET_LINES = 40
 export const MAX_SNIPPET_BYTES = 4096
 export const MAX_PROMPT_CHARS = 12000
 
+/** 与后端 MAX_IMAGE_BYTES / MAX_IMAGE_EDGE 保持一致。 */
+export const MAX_IMAGE_BYTES = 1024 * 1024
+export const MAX_IMAGE_EDGE = 1600
+
 export const PROMPT_API_BASE = (
   import.meta.env.VITE_PROMPT_API_BASE || 'http://127.0.0.1:8000'
 ).replace(/\/$/, '')

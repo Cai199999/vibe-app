@@ -1,5 +1,11 @@
+import { useRef } from 'react'
+
 import { Icon, type IconName } from './ui/Icon'
-import type { BridgeStatus, Mode } from '../types/vibe'
+import type {
+  BridgeStatus,
+  Mode,
+  ScreenshotAsset,
+} from '../types/vibe'
 
 interface ModeOption {
   mode: Mode
@@ -53,6 +59,10 @@ interface TopBarProps {
   projectName: string | null
   /** null 表示握手成功但快照尚未到达。 */
   elementCount: number | null
+  screenshot: ScreenshotAsset | null
+  screenshotLoading: boolean
+  onUploadScreenshot: (file: File) => void
+  onRemoveScreenshot: () => void
 }
 
 export function TopBar({
@@ -65,8 +75,14 @@ export function TopBar({
   previewOrigin,
   projectName,
   elementCount,
+  screenshot,
+  screenshotLoading,
+  onUploadScreenshot,
+  onRemoveScreenshot,
 }: TopBarProps) {
   const status = STATUS_META[bridgeStatus]
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const visualMode = bridgeStatus === 'visual'
 
   return (
     <header className="relative z-40 flex h-[60px] shrink-0 items-center gap-3 border-b border-white/[0.08] bg-[#0c0f15] px-3">
@@ -115,6 +131,56 @@ export function TopBar({
               </button>
             </span>
           ))}
+
+          {visualMode && (
+            <>
+              <span className="mx-1 h-4 w-px bg-white/10" />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                data-testid="screenshot-file-input"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  if (file) onUploadScreenshot(file)
+                  // 允许连续选择同一张图片时仍触发 change。
+                  event.target.value = ''
+                }}
+              />
+              <button
+                type="button"
+                data-testid="screenshot-upload"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={screenshotLoading}
+                className="mode-btn whitespace-nowrap disabled:opacity-50"
+                title="上传截图，或按 Ctrl / ⌘ + V 粘贴（仅本机内存）"
+              >
+                {screenshot ? (
+                  <img
+                    src={screenshot.dataUrl}
+                    alt="当前截图缩略图"
+                    className="h-4 w-5 rounded-sm object-cover ring-1 ring-white/15"
+                  />
+                ) : (
+                  <Icon name="image" size={12} />
+                )}
+                {screenshotLoading ? '处理中' : screenshot ? '截图' : '上传截图'}
+              </button>
+              {screenshot && (
+                <button
+                  type="button"
+                  data-testid="screenshot-clear"
+                  onClick={onRemoveScreenshot}
+                  className="mode-btn px-1.5 text-slate-500 hover:text-rose-300"
+                  title="移除截图"
+                  aria-label="移除截图"
+                >
+                  <Icon name="close" size={11} />
+                </button>
+              )}
+            </>
+          )}
         </div>
       </div>
 
@@ -128,7 +194,7 @@ export function TopBar({
                 ? '握手成功，正在同步快照'
                 : `已同步 ${elementCount} 个 data-source 节点`
               : bridgeStatus === 'visual'
-                ? '未检测到源码插件：可圈画，不能生成 Prompt'
+                ? '未检测到源码插件：上传截图并圈画后可用视觉模型生成'
                 : bridgeStatus === 'idle'
                   ? '尚未加载本地项目'
                   : '正在探测项目内的 Vibe SDK（3 秒）'

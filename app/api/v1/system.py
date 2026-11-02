@@ -32,9 +32,13 @@ def health() -> dict[str, str]:
 def capabilities(
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
-    """返回模型能力、接口上限与功能开关，供画布启动时对齐。"""
+    """返回模型能力、接口上限与功能开关，供画布启动时对齐。
+
+    顶层 image_base64 始终会被接受：DeepSeek 走真实多模态模型，
+    Mock 走本地视觉 Mock。`model.multimodal` 只表示是否具备真实识图能力。
+    """
     provider = settings.prompt_provider.lower()
-    multimodal = provider == "deepseek" and settings.deepseek_multimodal
+    multimodal = provider == "deepseek"
 
     return {
         "apiVersion": API_VERSION,
@@ -43,6 +47,9 @@ def capabilities(
             "provider": "deepseek" if provider == "deepseek" else "mock",
             "name": (
                 settings.deepseek_model if provider == "deepseek" else "mock-prompt-v1"
+            ),
+            "visionModel": (
+                settings.deepseek_vision_model if provider == "deepseek" else None
             ),
             "multimodal": multimodal,
         },
@@ -66,7 +73,10 @@ def capabilities(
             "snippetRequired": True,
             "serverHistory": False,
             "streaming": False,
-            "imageInput": multimodal,
+            # 顶层截图输入不受模型能力限制：Mock 可用于本地联调。
+            "imageInput": True,
+            # 仅视觉标注（visual-draw）必须在顶层 image_base64 存在时使用。
+            "visualOnlyAnnotations": True,
             "snapshotFiltersDisplayNone": True,
         },
     }
