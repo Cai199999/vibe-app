@@ -1,0 +1,2291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vibe Canvas · 阶段二交互原型</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root { color-scheme: dark; }
+    * { -webkit-tap-highlight-color: transparent; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    #canvas {
+      background-color: #141821;
+      background-image: radial-gradient(circle, rgba(148, 163, 184, 0.16) 1px, transparent 1.2px);
+      background-size: 24px 24px;
+      background-position: 0 0;
+    }
+    #world { transform-origin: 0 0; will-change: transform; }
+    #world.is-animating { transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
+    #artboard { width: 1200px; height: 816px; }
+    #preview { width: 1200px; height: 772px; display: block; border: 0; background: #fff; }
+    #capture { left: 0; top: 44px; width: 1200px; height: 772px; z-index: 10; }
+    body[data-mode="interact"] #capture { pointer-events: none; }
+    body[data-mode="hand"] #capture { cursor: grab; }
+    body[data-mode="note"] #capture { cursor: crosshair; }
+    body[data-mode="draw"] #capture { cursor: crosshair; }
+    body[data-mode="drag"] #capture { cursor: grab; }
+    body.is-panning, body.is-panning #canvas, body.is-panning #capture { cursor: grabbing !important; }
+    body.space-pan #canvas, body.space-pan #capture { cursor: grab !important; }
+    #drawLayer {
+      position: absolute;
+      left: -2000px;
+      top: -2000px;
+      width: 6000px;
+      height: 5000px;
+      overflow: visible;
+      pointer-events: none;
+      z-index: 20;
+    }
+    #hoverBox {
+      position: absolute;
+      z-index: 25;
+      pointer-events: none;
+      border: 1.5px solid rgba(129, 140, 248, 0.95);
+      background: rgba(99, 102, 241, 0.07);
+      border-radius: 9px;
+      display: none;
+    }
+    #hoverBox.is-visible { display: block; }
+    #hoverLabel {
+      position: absolute;
+      left: -1px;
+      top: -24px;
+      white-space: nowrap;
+      font-size: 10px;
+      line-height: 1;
+      padding: 5px 7px;
+      border-radius: 6px;
+      background: #6366f1;
+      color: #fff;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+    }
+    #pinsLayer { position: absolute; left: 0; top: 0; z-index: 30; pointer-events: none; }
+    .pin {
+      position: absolute;
+      width: 24px;
+      height: 24px;
+      margin-left: -12px;
+      margin-top: -12px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      font-size: 10px;
+      font-weight: 800;
+      color: #fff;
+      border: 2px solid #0b0d12;
+      box-shadow: 0 3px 10px rgba(0, 0, 0, 0.45);
+      transform: scale(var(--pin-scale, 1));
+      transform-origin: center;
+      cursor: pointer;
+      pointer-events: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .pin.note { background: #6366f1; }
+    .pin.draw { background: #c026d3; }
+    .pin.drag { background: #059669; }
+    .pin.stale { background: #475569; }
+    .pin.is-selected { outline: 2px solid #fff; outline-offset: 2px; }
+    .mode-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 9px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 500;
+      color: #94a3b8;
+      transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+      white-space: nowrap;
+    }
+    .mode-btn:hover { color: #e2e8f0; background: rgba(255, 255, 255, 0.05); }
+    .mode-btn.is-active {
+      color: #fff;
+      background: rgba(99, 102, 241, 0.18);
+      box-shadow: inset 0 0 0 1px rgba(129, 140, 248, 0.38);
+    }
+    .mode-btn kbd {
+      font-size: 9px;
+      line-height: 1;
+      padding: 2px 4px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.07);
+      color: #64748b;
+      font-family: inherit;
+    }
+    .mode-btn.is-active kbd { color: #c7d2fe; background: rgba(99, 102, 241, 0.22); }
+    .logo-mark-main {
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #6366f1, #a855f7);
+      display: grid;
+      place-items: center;
+      color: #fff;
+      box-shadow: 0 8px 20px -6px rgba(99, 102, 241, 0.7);
+    }
+    .agent-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.22), rgba(217, 70, 239, 0.22));
+      box-shadow: inset 0 0 0 1px rgba(129, 140, 248, 0.3);
+      display: grid;
+      place-items: center;
+      color: #c7d2fe;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: #fff;
+      box-shadow: 0 8px 20px -8px rgba(99, 102, 241, 0.7);
+      transition: filter 0.15s, transform 0.15s;
+    }
+    .btn-primary:hover:not(:disabled) { filter: brightness(1.08); }
+    .btn-primary:active:not(:disabled) { transform: translateY(1px); }
+    .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+    .btn-ghost {
+      background: rgba(255, 255, 255, 0.04);
+      color: #cbd5e1;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      transition: background 0.15s, color 0.15s;
+    }
+    .btn-ghost:hover:not(:disabled) { background: rgba(255, 255, 255, 0.08); color: #fff; }
+    .btn-ghost:disabled { opacity: 0.35; cursor: not-allowed; }
+    .anno-card {
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.025);
+      border-radius: 12px;
+      padding: 10px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .anno-card:hover { background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.14); }
+    .anno-card.is-selected { border-color: rgba(129, 140, 248, 0.55); background: rgba(99, 102, 241, 0.1); }
+    .anno-num {
+      width: 22px;
+      height: 22px;
+      border-radius: 7px;
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+      font-size: 10px;
+      font-weight: 800;
+      color: #fff;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .anno-num.note { background: #6366f1; }
+    .anno-num.draw { background: #c026d3; }
+    .anno-num.drag { background: #059669; }
+    .status-chip { font-size: 9px; line-height: 1; padding: 3px 6px; border-radius: 999px; white-space: nowrap; }
+    .status-chip.pending { background: rgba(245, 158, 11, 0.12); color: #fbbf24; }
+    .status-chip.applied { background: rgba(16, 185, 129, 0.12); color: #34d399; }
+    .status-chip.stale { background: rgba(148, 163, 184, 0.12); color: #94a3b8; }
+    .clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.18); border-radius: 8px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.28); }
+    ::-webkit-scrollbar-track { background: transparent; }
+    .anno-outline {
+      fill: rgba(99, 102, 241, 0.04);
+      stroke: #818cf8;
+      stroke-width: 1.5;
+      stroke-dasharray: 5 4;
+      vector-effect: non-scaling-stroke;
+    }
+    .anno-outline.is-selected { stroke-width: 2.5; fill: rgba(99, 102, 241, 0.09); }
+    .anno-outline.is-stale { stroke: #64748b; fill: rgba(100, 116, 139, 0.04); }
+    .draw-path {
+      fill: none;
+      stroke: #e879f9;
+      stroke-width: 2.4;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      vector-effect: non-scaling-stroke;
+    }
+    .draw-path.is-selected { stroke: #f0abfc; stroke-width: 3.2; }
+    .draw-bbox {
+      fill: rgba(232, 121, 249, 0.03);
+      stroke: rgba(232, 121, 249, 0.35);
+      stroke-width: 1;
+      stroke-dasharray: 3 4;
+      vector-effect: non-scaling-stroke;
+    }
+    .drag-from {
+      fill: none;
+      stroke: rgba(148, 163, 184, 0.55);
+      stroke-width: 1;
+      stroke-dasharray: 3 3;
+      vector-effect: non-scaling-stroke;
+    }
+    .drag-to {
+      fill: rgba(52, 211, 153, 0.06);
+      stroke: #34d399;
+      stroke-width: 1.5;
+      stroke-dasharray: 6 4;
+      vector-effect: non-scaling-stroke;
+    }
+    .drag-to.is-selected { stroke-width: 2.4; fill: rgba(52, 211, 153, 0.11); }
+    .drag-arrow {
+      stroke: #34d399;
+      stroke-width: 1.5;
+      fill: none;
+      marker-end: url(#arrowHead);
+      vector-effect: non-scaling-stroke;
+    }
+    .draft-outline {
+      fill: rgba(99, 102, 241, 0.05);
+      stroke: #a5b4fc;
+      stroke-width: 1.5;
+      stroke-dasharray: 4 4;
+      vector-effect: non-scaling-stroke;
+    }
+    .draft-draw {
+      fill: none;
+      stroke: #e879f9;
+      stroke-width: 2.4;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      opacity: 0.85;
+      vector-effect: non-scaling-stroke;
+    }
+    .composer { display: none; position: fixed; z-index: 60; width: 320px; }
+    .composer.is-open { display: block; }
+    #agentModal { display: none; }
+    #agentModal.is-open { display: flex; }
+    #refreshOverlay { display: none; }
+    #refreshOverlay.is-open { display: grid; }
+    #modalClose:disabled { opacity: 0.4; cursor: not-allowed; }
+    #clearBtn:disabled { opacity: 0.35; cursor: not-allowed; }
+    .result-tab { font-size: 11px; padding: 5px 10px; border-radius: 7px; color: #94a3b8; }
+    .result-tab.is-active {
+      background: rgba(99, 102, 241, 0.16);
+      color: #c7d2fe;
+      box-shadow: inset 0 0 0 1px rgba(129, 140, 248, 0.3);
+    }
+    .step {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid transparent;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .step.is-active { background: rgba(99, 102, 241, 0.08); border-color: rgba(99, 102, 241, 0.25); }
+    .step-dot {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 1.5px solid rgba(148, 163, 184, 0.4);
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .step.is-active .step-dot { border-color: #818cf8; background: rgba(99, 102, 241, 0.25); }
+    .step.is-active .step-dot::after {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #c7d2fe;
+      animation: pulseSoft 1s infinite;
+    }
+    .step.is-done .step-dot { background: #10b981; border-color: #10b981; }
+    .step.is-done .step-dot::after { content: "✓"; font-size: 10px; font-weight: 700; color: #052e1a; }
+    .step-state { font-size: 9px; color: #475569; }
+    .step-state.active { color: #a5b4fc; }
+    .step-state.done { color: #34d399; }
+    .composer-type { border-radius: 5px; padding: 2px 6px; font-size: 9px; font-weight: 600; }
+    .composer-type.note { background: rgba(99, 102, 241, 0.15); color: #a5b4fc; }
+    .composer-type.draw { background: rgba(217, 70, 239, 0.15); color: #f0abfc; }
+    .composer-type.drag { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; }
+    .clear-armed { color: #fda4af !important; }
+    @keyframes pulseSoft { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255, 255, 255, 0.25);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    #toast {
+      opacity: 0;
+      transform: translate(-50%, 8px);
+      transition: opacity 0.2s, transform 0.2s;
+    }
+    #toast.is-visible { opacity: 1; transform: translate(-50%, 0); }
+  </style>
+</head>
+<body data-mode="interact" class="bg-[#0b0d12] text-slate-200">
+  <div class="flex h-screen flex-col">
+    <!-- ================= 顶部工具栏 ================= -->
+    <header class="relative z-40 grid h-[60px] shrink-0 grid-cols-[260px_1fr_320px] items-center gap-3 border-b border-white/[0.08] bg-[#0c0f15] px-3">
+      <div class="flex min-w-0 items-center gap-2.5">
+        <div class="logo-mark-main shrink-0">
+          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 19l7-7 3 3-7 7-3-3z" />
+            <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
+            <path d="M2 2l7.586 7.586" />
+            <circle cx="11" cy="11" r="2" />
+          </svg>
+        </div>
+        <div class="min-w-0">
+          <div class="truncate text-[13px] font-semibold tracking-tight text-white">Vibe Canvas</div>
+          <div class="-mt-0.5 truncate text-[10px] text-slate-500">visual intent → code</div>
+        </div>
+        <div class="ml-1 hidden items-center gap-1.5 rounded-lg bg-white/[0.04] px-2 py-1 ring-1 ring-white/[0.08] md:flex">
+          <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+          <span class="text-[10px] text-slate-300">vibe-demo</span>
+          <span class="text-[9px] text-slate-500">React</span>
+        </div>
+      </div>
+
+      <div class="flex min-w-0 items-center justify-center">
+        <div class="no-scrollbar flex items-center gap-0.5 overflow-x-auto rounded-xl bg-white/[0.04] p-1 ring-1 ring-white/[0.08]">
+          <button type="button" class="mode-btn" data-mode="interact">交互 <kbd>V</kbd></button>
+          <button type="button" class="mode-btn" data-mode="hand">抓手 <kbd>H</kbd></button>
+          <div class="mx-1 h-4 w-px bg-white/10"></div>
+          <button type="button" class="mode-btn" data-mode="note">旁注 <kbd>N</kbd></button>
+          <button type="button" class="mode-btn" data-mode="draw">圈画 <kbd>P</kbd></button>
+          <button type="button" class="mode-btn" data-mode="drag">拖拽 <kbd>D</kbd></button>
+        </div>
+      </div>
+
+      <div class="flex min-w-0 items-center justify-end gap-2">
+        <span class="hidden items-center gap-1.5 rounded-full border border-amber-400/20 bg-amber-400/10 px-2.5 py-1 text-[9px] font-medium text-amber-300 xl:inline-flex">
+          <span class="h-1 w-1 rounded-full bg-amber-300"></span> Prototype · 模拟 Agent
+        </span>
+        <button id="undoBtn" type="button" class="btn-ghost grid h-8 w-8 place-items-center rounded-lg" title="撤销 (⌘/Ctrl + Z)" aria-label="撤销">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 14l-4-4 4-4" />
+            <path d="M5 10h7a4 4 0 010 8h-1" />
+          </svg>
+        </button>
+        <button id="submitBtn" type="button" class="btn-primary inline-flex h-8 items-center gap-2 rounded-lg px-3 text-[11px] font-semibold">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 16V4" />
+            <path d="M7 9l5-5 5 5" />
+            <path d="M4 20h16" />
+          </svg>
+          <span id="submitLabel">保存并提交</span>
+          <span id="countBadge" class="grid h-[17px] min-w-[17px] place-items-center rounded-md bg-white/20 px-1 text-[9px] font-bold">0</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="flex min-h-0 flex-1">
+      <!-- ================= 画布 ================= -->
+      <main id="canvas" class="relative min-w-0 flex-1 touch-none overflow-hidden">
+        <div id="world" class="absolute left-0 top-0">
+          <section id="artboard" class="absolute left-0 top-0 overflow-hidden rounded-[14px] bg-[#0f131b] shadow-[0_30px_90px_-20px_rgba(0,0,0,0.8)] ring-1 ring-white/10">
+            <div class="flex h-11 items-center gap-3 border-b border-white/[0.08] bg-[#0f131b] px-4">
+              <div class="flex items-center gap-1.5">
+                <span class="h-2.5 w-2.5 rounded-full bg-[#ff5f57]"></span>
+                <span class="h-2.5 w-2.5 rounded-full bg-[#febc2e]"></span>
+                <span class="h-2.5 w-2.5 rounded-full bg-[#28c840]"></span>
+              </div>
+              <div class="mx-2 flex h-7 flex-1 items-center justify-center gap-2 rounded-md bg-white/[0.04] ring-1 ring-white/[0.06]">
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2">
+                  <rect x="5" y="11" width="14" height="10" rx="2" />
+                  <path d="M8 11V7a4 4 0 018 0v4" />
+                </svg>
+                <span class="font-mono text-[10px] text-slate-500">localhost:5173</span>
+              </div>
+              <span id="versionChip" class="rounded-md bg-emerald-400/10 px-1.5 py-0.5 font-mono text-[9px] text-emerald-300">v1</span>
+              <span class="font-mono text-[9px] text-slate-600">1200 × 772</span>
+            </div>
+            <iframe id="preview" title="vibe-demo 实时预览" sandbox="allow-scripts allow-same-origin"></iframe>
+          </section>
+
+          <div id="capture" class="absolute"></div>
+
+          <svg id="drawLayer" aria-hidden="true">
+            <defs>
+              <marker id="arrowHead" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto" markerUnits="strokeWidth">
+                <path d="M0,0 L6,3 L0,6 z" fill="#34d399"></path>
+              </marker>
+            </defs>
+            <g id="scene" transform="translate(2000,2000)"></g>
+          </svg>
+
+          <div id="hoverBox"><div id="hoverLabel"></div></div>
+          <div id="pinsLayer"></div>
+        </div>
+
+        <!-- 画布浮层 -->
+        <div class="absolute left-4 top-4 z-30 flex items-center gap-2 rounded-full border border-white/10 bg-[#0c0f15]/80 px-3 py-1.5 text-[10px] text-slate-400 backdrop-blur">
+          <span class="h-1.5 w-1.5 rounded-full bg-indigo-400"></span>
+          <span id="canvasModeLabel">交互模式</span>
+        </div>
+
+        <div class="absolute bottom-4 left-4 z-40 flex items-center gap-0.5 rounded-xl border border-white/10 bg-[#0c0f15]/90 p-1 shadow-xl backdrop-blur">
+          <button id="zoomOut" type="button" class="grid h-7 w-7 place-items-center rounded-lg text-slate-400 hover:bg-white/10 hover:text-white" title="缩小">−</button>
+          <button id="zoomLabel" type="button" class="h-7 min-w-[52px] rounded-lg px-1 font-mono text-[10px] text-slate-300 hover:bg-white/10" title="重置为 100%">100%</button>
+          <button id="zoomIn" type="button" class="grid h-7 w-7 place-items-center rounded-lg text-slate-400 hover:bg-white/10 hover:text-white" title="放大">+</button>
+          <div class="mx-1 h-4 w-px bg-white/10"></div>
+          <button id="fitBtn" type="button" class="h-7 rounded-lg px-2 text-[10px] text-slate-400 hover:bg-white/10 hover:text-white" title="适应画布">适应</button>
+        </div>
+
+        <div class="pointer-events-none absolute bottom-5 left-1/2 z-30 hidden -translate-x-1/2 items-center gap-3 rounded-full border border-white/[0.07] bg-[#0c0f15]/75 px-3 py-1.5 text-[10px] text-slate-500 backdrop-blur md:flex">
+          <span>空格 + 拖动 平移</span>
+          <span class="h-3 w-px bg-white/10"></span>
+          <span>⌘/Ctrl + 滚轮 缩放</span>
+          <span class="h-3 w-px bg-white/10"></span>
+          <span>Esc 取消</span>
+        </div>
+
+        <div id="refreshOverlay" class="absolute inset-0 z-50 place-items-center bg-[#0b0d12]/45 backdrop-blur-[1px]">
+          <div class="flex items-center gap-3 rounded-xl border border-white/10 bg-[#0c0f15] px-4 py-3 shadow-2xl">
+            <div class="spinner"></div>
+            <div>
+              <div class="text-[11px] font-medium text-slate-200">正在应用修改并刷新预览…</div>
+              <div class="text-[10px] text-slate-500">模拟外部工具执行 + HMR</div>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <!-- ================= 右侧修改清单 ================= -->
+      <aside class="relative z-40 flex w-[340px] shrink-0 flex-col border-l border-white/[0.08] bg-[#0c0f15] xl:w-[370px]">
+        <div class="border-b border-white/[0.08] p-4">
+          <div class="flex items-start justify-between gap-2">
+            <div>
+              <h2 class="text-[13px] font-semibold text-white">修改清单</h2>
+              <p class="mt-0.5 text-[10px] text-slate-500">保存并提交后转换为结构化指令</p>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span id="panelCount" class="grid h-5 min-w-[20px] place-items-center rounded-md bg-white/[0.06] px-1.5 text-[10px] font-semibold text-slate-300">0</span>
+              <button id="clearBtn" type="button" class="rounded-md px-1.5 py-1 text-[10px] text-slate-500 hover:bg-white/[0.06] hover:text-slate-300" title="清空所有标注">清空</button>
+            </div>
+          </div>
+          <div class="mt-3 flex items-start gap-2 rounded-lg border border-indigo-400/15 bg-indigo-400/[0.06] px-2.5 py-2">
+            <svg class="mt-0.5 h-3.5 w-3.5 shrink-0 text-indigo-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 8h.01M11 12h1v4h1" />
+            </svg>
+            <p id="modeHint" class="text-[10px] leading-relaxed text-indigo-200/80">预览可交互；点击不会产生标注。切到「旁注」开始指认。</p>
+          </div>
+        </div>
+
+        <div id="annotationList" class="min-h-0 flex-1 space-y-2 overflow-y-auto p-3"></div>
+
+        <div class="border-t border-white/[0.08] p-4">
+          <button id="lastResultBtn" type="button" class="mb-2 hidden w-full rounded-lg border border-white/10 py-1.5 text-[10px] text-slate-400 hover:bg-white/5 hover:text-slate-200">查看最近一次修改指令</button>
+          <button id="panelSubmit" type="button" class="btn-primary flex h-9 w-full items-center justify-center gap-2 rounded-lg text-[11px] font-semibold">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 16V4" />
+              <path d="M7 9l5-5 5 5" />
+              <path d="M4 20h16" />
+            </svg>
+            <span id="panelSubmitLabel">保存并提交</span>
+          </button>
+          <p class="mt-2 text-center text-[9px] leading-relaxed text-slate-600">提交后本地 Agent 分析，3–10 秒生成修改指令</p>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- ================= 旁注编辑浮层 ================= -->
+  <div id="composer" class="composer rounded-xl border border-white/10 bg-[#11151f] p-3 shadow-2xl shadow-black/50" role="dialog" aria-label="添加标注">
+    <div class="flex items-center justify-between gap-2">
+      <div class="flex min-w-0 items-center gap-2">
+        <span id="composerType" class="composer-type note">旁注</span>
+        <span id="composerTarget" class="max-w-[190px] truncate font-mono text-[9px] text-slate-500"></span>
+      </div>
+      <button id="composerClose" type="button" class="grid h-6 w-6 place-items-center rounded-md text-slate-500 hover:bg-white/5 hover:text-slate-200" aria-label="关闭">×</button>
+    </div>
+    <textarea id="composerInput" rows="3" class="mt-2.5 w-full resize-none rounded-lg border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] leading-relaxed text-slate-200 outline-none placeholder:text-slate-600 focus:border-indigo-400/50" placeholder="描述你希望怎么改…"></textarea>
+    <div class="mt-2 flex items-center justify-between gap-2">
+      <span id="composerHint" class="text-[9px] text-slate-600">旁注内容为必填 · ⌘/Ctrl + Enter 保存</span>
+      <div class="flex items-center gap-1.5">
+        <button id="composerCancel" type="button" class="btn-ghost rounded-md px-2.5 py-1.5 text-[10px]">取消</button>
+        <button id="composerSave" type="button" class="btn-primary rounded-md px-2.5 py-1.5 text-[10px] font-semibold">保存标注</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= Agent 结果弹窗 ================= -->
+  <div id="agentModal" class="fixed inset-0 z-[70] items-center justify-center bg-black/60 p-6 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="agentTitle">
+    <div class="flex max-h-[86vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0c0f15] shadow-2xl">
+      <div class="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4">
+        <div class="flex items-center gap-3">
+          <div class="agent-icon">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3l1.8 4.9L19 9.7l-4.2 3.1L16 18l-4-2.6L8 18l1.2-5.2L5 9.7l5.2-1.8L12 3z" />
+            </svg>
+          </div>
+          <div>
+            <h3 id="agentTitle" class="text-[13px] font-semibold text-white">本地 Agent · 修改指令生成</h3>
+            <p class="mt-0.5 text-[10px] text-slate-500">原型模拟流程，未真实调用 DeepSeek</p>
+          </div>
+        </div>
+        <button id="modalClose" type="button" class="grid h-7 w-7 place-items-center rounded-lg text-slate-500 hover:bg-white/5 hover:text-white" aria-label="关闭">×</button>
+      </div>
+
+      <div class="min-h-0 flex-1 overflow-y-auto">
+        <div id="agentSteps" class="space-y-1.5 p-4"></div>
+
+        <div id="agentResult" class="hidden border-t border-white/10">
+          <div class="flex items-center justify-between gap-3 px-4 pt-3">
+            <div class="flex items-center gap-1">
+              <button type="button" class="result-tab is-active" data-tab="prompt">Prompt</button>
+              <button type="button" class="result-tab" data-tab="json">结构化 JSON</button>
+            </div>
+            <span id="resultMeta" class="text-[9px] text-slate-500"></span>
+          </div>
+          <div class="p-4 pt-2">
+            <pre id="resultPre" class="max-h-[38vh] overflow-auto rounded-xl border border-white/10 bg-black/30 p-3 font-mono text-[10px] leading-relaxed text-slate-300"></pre>
+          </div>
+          <div class="flex flex-col gap-2 border-t border-white/10 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div class="text-[9px] leading-relaxed text-slate-500">
+              交付对象：Claude Code / Cursor<br />
+              vibe-app 不直接写文件（P4-B）
+            </div>
+            <div class="flex items-center gap-2">
+              <button id="copyBtn" type="button" class="btn-ghost inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px]">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="11" height="11" rx="2" />
+                  <path d="M5 15V5a2 2 0 012-2h10" />
+                </svg>
+                复制
+              </button>
+              <button id="applyBtn" type="button" class="btn-primary inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-semibold">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                  <path d="M20 11a8 8 0 10-2.3 5.7" />
+                  <path d="M20 4v7h-7" />
+                </svg>
+                模拟执行并刷新
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="pointer-events-none fixed bottom-6 left-1/2 z-[80] -translate-x-1/2 rounded-full border border-white/10 bg-[#0c0f15]/95 px-4 py-2 text-[10px] font-medium text-slate-200 shadow-2xl backdrop-blur"></div>
+
+  <!-- ================= 演示页面（iframe srcdoc） ================= -->
+  <template id="demoDoc">
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
+      body {
+        display: flex;
+        height: 772px;
+        background: #f6f7fb;
+        color: #0f172a;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      a { color: inherit; text-decoration: none; }
+      .sidebar {
+        width: 224px;
+        flex-shrink: 0;
+        background: #0f172a;
+        color: #cbd5e1;
+        padding: 18px 14px;
+        display: flex;
+        flex-direction: column;
+      }
+      .logo { display: flex; align-items: center; gap: 10px; color: #fff; font-weight: 700; font-size: 14px; letter-spacing: -0.02em; padding: 0 6px; }
+      .logo-mark {
+        width: 30px; height: 30px; border-radius: 10px;
+        background: linear-gradient(135deg, #6366f1, #a855f7);
+        display: grid; place-items: center;
+        font-size: 13px; font-weight: 800; color: #fff;
+        box-shadow: 0 6px 16px -6px rgba(99, 102, 241, 0.8);
+      }
+      .nav-label { margin: 24px 6px 8px; font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: #64748b; }
+      .nav-item { display: flex; align-items: center; gap: 10px; padding: 8px 9px; border-radius: 8px; font-size: 12px; color: #94a3b8; margin-bottom: 2px; }
+      .nav-item.active { background: #1e293b; color: #fff; }
+      .nav-ico { width: 15px; height: 15px; border-radius: 5px; background: #334155; flex-shrink: 0; }
+      .nav-item.active .nav-ico { background: linear-gradient(135deg, #818cf8, #c084fc); }
+      .nav-item .count { margin-left: auto; font-size: 9px; background: #1e293b; color: #94a3b8; padding: 2px 5px; border-radius: 999px; }
+      .sidebar-user { margin-top: auto; display: flex; align-items: center; gap: 9px; padding: 10px 6px 2px; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+      .user-avatar { width: 30px; height: 30px; border-radius: 50%; background: linear-gradient(135deg, #f59e0b, #ef4444); display: grid; place-items: center; font-size: 10px; font-weight: 700; color: #fff; }
+      .user-name { font-size: 11px; font-weight: 600; color: #e2e8f0; }
+      .user-mail { font-size: 9px; color: #64748b; }
+      .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+      .topbar { height: 64px; flex-shrink: 0; background: #fff; border-bottom: 1px solid #e7ebf3; display: flex; align-items: center; gap: 14px; padding: 0 26px; }
+      .breadcrumb { font-size: 11px; color: #94a3b8; }
+      .breadcrumb b { color: #334155; font-weight: 600; }
+      .search { margin-left: auto; width: 230px; height: 34px; border: 1px solid #e2e8f0; background: #f8fafc; border-radius: 9px; display: flex; align-items: center; gap: 7px; padding: 0 11px; color: #94a3b8; font-size: 11px; }
+      .search .shortcut { margin-left: auto; font-size: 9px; border: 1px solid #e2e8f0; border-radius: 4px; padding: 1px 4px; color: #94a3b8; }
+      .icon-btn { width: 32px; height: 32px; border-radius: 9px; border: 1px solid #e7ebf3; display: grid; place-items: center; color: #64748b; background: #fff; }
+      .avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #f59e0b, #ef4444); display: grid; place-items: center; color: #fff; font-size: 10px; font-weight: 700; }
+      .content { flex: 1; padding: 20px 26px 18px; overflow: hidden; }
+      .headline { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+      .headline h1 { margin: 0; font-size: 24px; letter-spacing: -0.035em; line-height: 1.15; }
+      .headline p { margin: 4px 0 0; font-size: 11px; color: #64748b; }
+      button { font-family: inherit; }
+      .btn-primary { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 13px; border: 0; border-radius: 9px; background: #0f172a; color: #fff; font-size: 11px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 12px -4px rgba(15, 23, 42, 0.5); transition: background 0.15s; }
+      .btn-primary:hover { background: #1e293b; }
+      .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+      .card { background: #fff; border: 1px solid #e7ebf3; border-radius: 14px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03); }
+      .stat { padding: 14px 15px 13px; position: relative; overflow: hidden; }
+      .stat-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+      .stat-label { font-size: 10px; color: #64748b; }
+      .stat-dot { width: 7px; height: 7px; border-radius: 50%; }
+      .stat-dot.indigo { background: #6366f1; }
+      .stat-dot.emerald { background: #10b981; }
+      .stat-dot.amber { background: #f59e0b; }
+      .stat-value { margin-top: 7px; font-size: 24px; font-weight: 700; letter-spacing: -0.045em; line-height: 1; }
+      .stat-foot { margin-top: 7px; display: flex; align-items: center; gap: 5px; font-size: 9px; color: #94a3b8; }
+      .delta { font-weight: 700; }
+      .delta.up { color: #059669; }
+      .delta.down { color: #dc2626; }
+      .spark { position: absolute; right: 12px; bottom: 10px; width: 58px; height: 26px; opacity: 0.85; }
+      .grid2 { display: grid; grid-template-columns: 1.55fr 1fr; gap: 12px; margin-top: 12px; }
+      .card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 14px 15px 0; }
+      .card-title { font-size: 12px; font-weight: 650; letter-spacing: -0.01em; }
+      .card-sub { margin-top: 2px; font-size: 9px; color: #94a3b8; }
+      .pill { font-size: 9px; color: #64748b; background: #f1f5f9; border-radius: 999px; padding: 3px 7px; }
+      .chart-body { padding: 8px 12px 10px; }
+      .chart-svg { width: 100%; height: 180px; display: block; }
+      .channel { padding: 11px 15px 0; }
+      .channel-row { display: flex; align-items: center; justify-content: space-between; font-size: 10px; color: #475569; }
+      .channel-name { display: flex; align-items: center; gap: 6px; }
+      .channel-dot { width: 6px; height: 6px; border-radius: 50%; }
+      .bar { height: 5px; border-radius: 999px; background: #eef2f7; margin-top: 6px; overflow: hidden; }
+      .bar > span { display: block; height: 100%; border-radius: 999px; }
+      .table-card { margin-top: 12px; overflow: hidden; }
+      .table-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 15px 0; }
+      table { width: 100%; border-collapse: collapse; }
+      thead th { text-align: left; font-size: 9px; font-weight: 500; color: #94a3b8; padding: 8px 15px; border-bottom: 1px solid #eef2f7; }
+      tbody td { font-size: 10px; color: #475569; padding: 8px 15px; border-bottom: 1px solid #f1f5f9; }
+      tbody tr:last-child td { border-bottom: 0; }
+      .project-name { font-weight: 600; color: #0f172a; }
+      .status { display: inline-flex; align-items: center; gap: 5px; font-size: 9px; padding: 3px 7px; border-radius: 999px; }
+      .status i { width: 5px; height: 5px; border-radius: 50%; }
+      .status.progress { background: #eef2ff; color: #4f46e5; }
+      .status.progress i { background: #6366f1; }
+      .status.review { background: #fffbeb; color: #b45309; }
+      .status.review i { background: #f59e0b; }
+      .status.shipped { background: #ecfdf5; color: #047857; }
+      .status.shipped i { background: #10b981; }
+      .live-pill { display: inline-flex; align-items: center; gap: 5px; font-size: 9px; color: #047857; background: #ecfdf5; border-radius: 999px; padding: 3px 7px; }
+      .live-dot { width: 5px; height: 5px; border-radius: 50%; background: #10b981; }
+      .flash { animation: flash 1s ease-out; }
+      @keyframes flash {
+        0% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.45); }
+        100% { box-shadow: 0 0 0 14px rgba(99, 102, 241, 0); }
+      }
+    </style>
+
+    <aside class="sidebar" data-source="src/components/Sidebar.tsx:12" data-component="Sidebar">
+      <div class="logo"><div class="logo-mark">A</div><span>Acme Labs</span></div>
+      <div class="nav-label">Workspace</div>
+      <div class="nav-item active"><span class="nav-ico"></span>Overview</div>
+      <div class="nav-item"><span class="nav-ico"></span>Projects <span class="count">12</span></div>
+      <div class="nav-item"><span class="nav-ico"></span>Analytics</div>
+      <div class="nav-item"><span class="nav-ico"></span>Team</div>
+      <div class="nav-label">Settings</div>
+      <div class="nav-item"><span class="nav-ico"></span>Preferences</div>
+      <div class="nav-item"><span class="nav-ico"></span>Help center</div>
+      <div class="sidebar-user">
+        <div class="user-avatar">AL</div>
+        <div>
+          <div class="user-name">Alex Lin</div>
+          <div class="user-mail">alex@acme.dev</div>
+        </div>
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar" data-source="src/components/Topbar.tsx:18" data-component="Topbar">
+        <div class="breadcrumb">Acme / <b>Dashboard</b></div>
+        <div class="search" data-source="src/components/Topbar.tsx:31" data-component="SearchBox">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+          Search projects…
+          <span class="shortcut">⌘K</span>
+        </div>
+        <span class="live-pill"><span class="live-dot"></span>Live</span>
+        <div class="icon-btn">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9z" /><path d="M10 21h4" /></svg>
+        </div>
+        <div class="avatar">AL</div>
+      </header>
+
+      <div class="content">
+        <div class="headline">
+          <div>
+            <h1 data-source="src/pages/Dashboard.tsx:34" data-component="DashboardHeading">Welcome back, Alex</h1>
+            <p data-source="src/pages/Dashboard.tsx:35" data-component="DashboardSubtitle">Here's what's happening across your projects today.</p>
+          </div>
+          <button id="primary-cta" class="btn-primary" data-source="src/components/PrimaryButton.tsx:8" data-component="PrimaryButton">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12" /><path d="M7 10l5 5 5-5" /><path d="M4 21h16" /></svg>
+            Export CSV
+          </button>
+        </div>
+
+        <div class="stats">
+          <div class="card stat" data-source="src/components/StatCard.tsx:15" data-component="StatCard">
+            <div class="stat-top"><span class="stat-label">Total revenue</span><span class="stat-dot indigo"></span></div>
+            <div class="stat-value">$48,290</div>
+            <div class="stat-foot"><span class="delta up">↗ 12.4%</span><span>vs last month</span></div>
+            <svg class="spark" viewBox="0 0 58 26"><path d="M1 20 L9 16 L16 18 L24 10 L32 13 L40 6 L48 9 L57 2" fill="none" stroke="#6366f1" stroke-width="1.6" stroke-linecap="round" /></svg>
+          </div>
+          <div class="card stat" data-source="src/components/StatCard.tsx:15" data-component="StatCard">
+            <div class="stat-top"><span class="stat-label">Active users</span><span class="stat-dot emerald"></span></div>
+            <div class="stat-value">8,942</div>
+            <div class="stat-foot"><span class="delta up">↗ 5.2%</span><span>vs last month</span></div>
+            <svg class="spark" viewBox="0 0 58 26"><path d="M1 18 L9 19 L16 12 L24 14 L32 8 L40 11 L48 5 L57 7" fill="none" stroke="#10b981" stroke-width="1.6" stroke-linecap="round" /></svg>
+          </div>
+          <div class="card stat" data-source="src/components/StatCard.tsx:15" data-component="StatCard">
+            <div class="stat-top"><span class="stat-label">Conversion rate</span><span class="stat-dot amber"></span></div>
+            <div class="stat-value">3.84%</div>
+            <div class="stat-foot"><span class="delta down">↘ 0.4%</span><span>vs last month</span></div>
+            <svg class="spark" viewBox="0 0 58 26"><path d="M1 8 L9 11 L16 9 L24 15 L32 13 L40 17 L48 14 L57 19" fill="none" stroke="#f59e0b" stroke-width="1.6" stroke-linecap="round" /></svg>
+          </div>
+        </div>
+
+        <div class="grid2">
+          <div class="card" data-source="src/components/RevenueChart.tsx:31" data-component="RevenueChart">
+            <div class="card-head">
+              <div><div class="card-title">Revenue overview</div><div class="card-sub">Last 30 days</div></div>
+              <span class="pill">Monthly</span>
+            </div>
+            <div class="chart-body">
+              <svg class="chart-svg" viewBox="0 0 560 180" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="areaFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#6366f1" stop-opacity="0.22" />
+                    <stop offset="100%" stop-color="#6366f1" stop-opacity="0" />
+                  </linearGradient>
+                </defs>
+                <line x1="0" y1="30" x2="560" y2="30" stroke="#eef2f7" stroke-width="1" />
+                <line x1="0" y1="70" x2="560" y2="70" stroke="#eef2f7" stroke-width="1" />
+                <line x1="0" y1="110" x2="560" y2="110" stroke="#eef2f7" stroke-width="1" />
+                <line x1="0" y1="150" x2="560" y2="150" stroke="#eef2f7" stroke-width="1" />
+                <path d="M0 142 C30 136 44 120 70 124 C96 128 108 146 136 138 C164 130 176 96 204 100 C232 104 244 126 272 118 C300 110 314 72 342 78 C370 84 384 104 412 96 C440 88 452 52 480 58 C508 64 530 36 560 30 L560 180 L0 180 Z" fill="url(#areaFill)" />
+                <path d="M0 142 C30 136 44 120 70 124 C96 128 108 146 136 138 C164 130 176 96 204 100 C232 104 244 126 272 118 C300 110 314 72 342 78 C370 84 384 104 412 96 C440 88 452 52 480 58 C508 64 530 36 560 30" fill="none" stroke="#6366f1" stroke-width="2.4" stroke-linecap="round" />
+                <circle cx="480" cy="58" r="4" fill="#fff" stroke="#6366f1" stroke-width="2" />
+              </svg>
+            </div>
+          </div>
+
+          <div class="card" data-source="src/components/ChannelList.tsx:14" data-component="ChannelList">
+            <div class="card-head">
+              <div><div class="card-title">Top channels</div><div class="card-sub">Traffic share</div></div>
+              <span class="pill">This month</span>
+            </div>
+            <div style="padding-bottom: 8px">
+              <div class="channel">
+                <div class="channel-row"><span class="channel-name"><span class="channel-dot" style="background:#6366f1"></span>Organic search</span><span>42%</span></div>
+                <div class="bar"><span style="width:42%;background:#6366f1"></span></div>
+              </div>
+              <div class="channel">
+                <div class="channel-row"><span class="channel-name"><span class="channel-dot" style="background:#a855f7"></span>Referral</span><span>28%</span></div>
+                <div class="bar"><span style="width:28%;background:#a855f7"></span></div>
+              </div>
+              <div class="channel">
+                <div class="channel-row"><span class="channel-name"><span class="channel-dot" style="background:#10b981"></span>Paid social</span><span>18%</span></div>
+                <div class="bar"><span style="width:18%;background:#10b981"></span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card table-card" data-source="src/components/RecentProjects.tsx:19" data-component="RecentProjects">
+          <div class="table-head">
+            <div class="card-title">Recent projects</div>
+            <span class="pill">View all</span>
+          </div>
+          <table>
+            <thead>
+              <tr><th>Project</th><th>Owner</th><th>Status</th><th>Updated</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="project-name">Design system refresh</td>
+                <td>Mia Chen</td>
+                <td><span class="status progress"><i></i>In progress</span></td>
+                <td>2h ago</td>
+              </tr>
+              <tr>
+                <td class="project-name">Mobile onboarding</td>
+                <td>Sam Rivera</td>
+                <td><span class="status review"><i></i>In review</span></td>
+                <td>5h ago</td>
+              </tr>
+              <tr>
+                <td class="project-name">API v2 migration</td>
+                <td>Alex Lin</td>
+                <td><span class="status shipped"><i></i>Shipped</span></td>
+                <td>1d ago</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      document.addEventListener("click", function (event) {
+        var link = event.target.closest && event.target.closest("a");
+        if (link) event.preventDefault();
+      }, true);
+    </script>
+  </template>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const $ = (sel, root = document) => root.querySelector(sel);
+      const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+      const esc = (s = "") => String(s ?? "").replace(/[&<>"']/g, (c) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      }[c]));
+      const fmtDelta = (n) => (n >= 0 ? "+" : "") + Math.round(n);
+      const typeName = (t) => ({ note: "旁注", draw: "圈画", drag: "拖拽" }[t] || t);
+      const defaultNote = (a) => {
+        if (a.type === "note") return "修改此元素";
+        if (a.type === "draw") return "修改圈选区域";
+        return a.target ? `将 ${a.target.component} 移动到目标位置` : "移动元素";
+      };
+
+      const els = {
+        canvas: $("#canvas"),
+        world: $("#world"),
+        artboard: $("#artboard"),
+        preview: $("#preview"),
+        capture: $("#capture"),
+        drawLayer: $("#drawLayer"),
+        scene: $("#scene"),
+        hoverBox: $("#hoverBox"),
+        hoverLabel: $("#hoverLabel"),
+        pinsLayer: $("#pinsLayer"),
+        annotationList: $("#annotationList"),
+        modeHint: $("#modeHint"),
+        canvasModeLabel: $("#canvasModeLabel"),
+        submitBtn: $("#submitBtn"),
+        submitLabel: $("#submitLabel"),
+        countBadge: $("#countBadge"),
+        panelSubmit: $("#panelSubmit"),
+        panelSubmitLabel: $("#panelSubmitLabel"),
+        panelCount: $("#panelCount"),
+        undoBtn: $("#undoBtn"),
+        clearBtn: $("#clearBtn"),
+        zoomLabel: $("#zoomLabel"),
+        versionChip: $("#versionChip"),
+        composer: $("#composer"),
+        composerType: $("#composerType"),
+        composerTarget: $("#composerTarget"),
+        composerInput: $("#composerInput"),
+        composerHint: $("#composerHint"),
+        composerSave: $("#composerSave"),
+        composerCancel: $("#composerCancel"),
+        composerClose: $("#composerClose"),
+        agentModal: $("#agentModal"),
+        agentSteps: $("#agentSteps"),
+        agentResult: $("#agentResult"),
+        resultPre: $("#resultPre"),
+        resultMeta: $("#resultMeta"),
+        copyBtn: $("#copyBtn"),
+        applyBtn: $("#applyBtn"),
+        modalClose: $("#modalClose"),
+        refreshOverlay: $("#refreshOverlay"),
+        toast: $("#toast"),
+        lastResultBtn: $("#lastResultBtn"),
+      };
+
+      const state = {
+        mode: "interact",
+        zoom: 1,
+        pan: { x: 0, y: 0 },
+        annotations: [],
+        selectedId: null,
+        draft: null,
+        gesture: null,
+        space: false,
+        previewReady: false,
+        submitting: false,
+        processing: false,
+        userMoved: false,
+        lastPrompt: "",
+        lastJson: "",
+        resultTab: "prompt",
+        appliedVersion: 1,
+        clearArmed: false,
+        toastTimer: null,
+        sceneFrame: null,
+      };
+
+      const MODE_META = {
+        interact: { label: "交互模式", hint: "预览可交互；点击不会产生标注。切到「旁注」开始指认。" },
+        hand: { label: "抓手模式", hint: "拖动画布查看不同区域；滚轮或双指也可平移。" },
+        note: { label: "旁注模式", hint: "点击页面元素，写下修改意图；标注会绑定到该元素。" },
+        draw: { label: "圈画模式", hint: "按住拖动画圈，圈住要修改的区域；松手后补充意图。" },
+        drag: { label: "拖拽模式", hint: "拖拽元素表达目标位置，不会直接改真实 DOM。" },
+      };
+
+      const AGENT_STEPS = [
+        { label: "上传标注数据", detail: "标注 JSON 已发送到本地 Agent", ms: 650 },
+        { label: "解析目标元素", detail: "匹配 data-source 与组件文件", ms: 850 },
+        { label: "DeepSeek 生成修改方案", detail: "理解空间意图与约束", ms: 1500 },
+        { label: "生成外部工具指令", detail: "输出可交给 Claude Code / Cursor 的 Prompt", ms: 500 },
+      ];
+
+      /* ================= 坐标与变换 ================= */
+
+      function screenToWorld(clientX, clientY) {
+        const r = els.canvas.getBoundingClientRect();
+        return {
+          x: (clientX - r.left - state.pan.x) / state.zoom,
+          y: (clientY - r.top - state.pan.y) / state.zoom,
+        };
+      }
+
+      function worldToScreen(p) {
+        const r = els.canvas.getBoundingClientRect();
+        return {
+          x: r.left + state.pan.x + p.x * state.zoom,
+          y: r.top + state.pan.y + p.y * state.zoom,
+        };
+      }
+
+      function applyTransform() {
+        els.world.style.transform = `translate(${state.pan.x}px, ${state.pan.y}px) scale(${state.zoom})`;
+        els.zoomLabel.textContent = `${Math.round(state.zoom * 100)}%`;
+        els.canvas.style.backgroundSize = `${24 * state.zoom}px ${24 * state.zoom}px`;
+        els.canvas.style.backgroundPosition = `${state.pan.x}px ${state.pan.y}px`;
+        els.pinsLayer.style.setProperty("--pin-scale", String(1 / state.zoom));
+      }
+
+      function zoomAt(clientX, clientY, factor) {
+        const r = els.canvas.getBoundingClientRect();
+        const wx = (clientX - r.left - state.pan.x) / state.zoom;
+        const wy = (clientY - r.top - state.pan.y) / state.zoom;
+        const next = clamp(state.zoom * factor, 0.25, 2.5);
+        state.pan.x = clientX - r.left - wx * next;
+        state.pan.y = clientY - r.top - wy * next;
+        state.zoom = next;
+        state.userMoved = true;
+        applyTransform();
+      }
+
+      function zoomCenter(factor) {
+        const r = els.canvas.getBoundingClientRect();
+        zoomAt(r.left + r.width / 2, r.top + r.height / 2, factor);
+      }
+
+      function fitView(animate = false) {
+        const r = els.canvas.getBoundingClientRect();
+        const pad = 80;
+        const z = clamp(
+          Math.min((r.width - pad * 2) / 1200, (r.height - pad * 2) / 816),
+          0.25,
+          1.15
+        );
+        state.zoom = z;
+        state.pan.x = (r.width - 1200 * z) / 2;
+        state.pan.y = (r.height - 816 * z) / 2;
+        if (animate) {
+          els.world.classList.add("is-animating");
+          setTimeout(() => els.world.classList.remove("is-animating"), 320);
+        }
+        applyTransform();
+      }
+
+      function handleWheel(clientX, clientY, dx, dy, ctrl) {
+        if (ctrl) {
+          zoomAt(clientX, clientY, dy > 0 ? 0.92 : 1.08);
+          return;
+        }
+        state.pan.x -= dx;
+        state.pan.y -= dy;
+        state.userMoved = true;
+        applyTransform();
+      }
+
+      /* ================= iframe 元素定位 ================= */
+
+      function iframeOffset() {
+        const ir = els.preview.getBoundingClientRect();
+        const cr = els.canvas.getBoundingClientRect();
+        return {
+          x: (ir.left - cr.left - state.pan.x) / state.zoom,
+          y: (ir.top - cr.top - state.pan.y) / state.zoom,
+        };
+      }
+
+      function elRectToWorld(el) {
+        const r = el.getBoundingClientRect();
+        const off = iframeOffset();
+        return { x: off.x + r.left, y: off.y + r.top, w: r.width, h: r.height };
+      }
+
+      function targetFromEl(el) {
+        const source = el.getAttribute("data-source") || "";
+        const doc = els.preview.contentDocument;
+        const same = doc
+          ? [...doc.querySelectorAll("[data-source]")].filter(
+              (x) => x.getAttribute("data-source") === source
+            )
+          : [];
+        const file = source.split("/").pop() || source || "Unknown";
+        return {
+          source,
+          component: el.getAttribute("data-component") || file.replace(/\.[^.]+$/, ""),
+          index: Math.max(0, same.indexOf(el)),
+          rect: elRectToWorld(el),
+        };
+      }
+
+      function resolveTarget(t) {
+        if (!t || !t.source || !els.preview.contentDocument) return null;
+        const same = [...els.preview.contentDocument.querySelectorAll("[data-source]")].filter(
+          (x) => x.getAttribute("data-source") === t.source
+        );
+        return same[t.index] || same[0] || null;
+      }
+
+      function getTargetAt(clientX, clientY) {
+        const doc = els.preview.contentDocument;
+        if (!doc) return null;
+        const ir = els.preview.getBoundingClientRect();
+        const lx = (clientX - ir.left) / state.zoom;
+        const ly = (clientY - ir.top) / state.zoom;
+        if (lx < 0 || ly < 0 || lx > els.preview.clientWidth || ly > els.preview.clientHeight) {
+          return null;
+        }
+        const el = doc.elementFromPoint(lx, ly);
+        if (!el || !el.closest) return null;
+        const target = el.closest("[data-source]");
+        return target ? targetFromEl(target) : null;
+      }
+
+      function elementsInBox(box) {
+        const doc = els.preview.contentDocument;
+        if (!doc) return [];
+        const off = iframeOffset();
+        const seen = new Set();
+        const out = [];
+        doc.querySelectorAll("[data-source]").forEach((el) => {
+          const r = el.getBoundingClientRect();
+          const rect = { x: off.x + r.left, y: off.y + r.top, w: r.width, h: r.height };
+          if (!intersects(box, rect)) return;
+          const t = targetFromEl(el);
+          const key = `${t.source}#${t.index}`;
+          if (seen.has(key)) return;
+          seen.add(key);
+          out.push(t);
+        });
+        return out;
+      }
+
+      function intersects(a, b) {
+        return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+      }
+
+      /* ================= 几何工具 ================= */
+
+      function bboxOf(points) {
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        points.forEach((p) => {
+          minX = Math.min(minX, p.x);
+          minY = Math.min(minY, p.y);
+          maxX = Math.max(maxX, p.x);
+          maxY = Math.max(maxY, p.y);
+        });
+        if (!Number.isFinite(minX)) return { x: 0, y: 0, w: 0, h: 0 };
+        return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+      }
+
+      function unionRect(rects) {
+        if (!rects.length) return { x: 0, y: 0, w: 1, h: 1 };
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        rects.forEach((r) => {
+          minX = Math.min(minX, r.x);
+          minY = Math.min(minY, r.y);
+          maxX = Math.max(maxX, r.x + r.w);
+          maxY = Math.max(maxY, r.y + r.h);
+        });
+        return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+      }
+
+      function makeLoop(r, pad = 16) {
+        const x = r.x - pad;
+        const y = r.y - pad;
+        const w = r.w + pad * 2;
+        const h = r.h + pad * 2;
+        const pts = [
+          [x + 10, y],
+          [x + w * 0.35, y - 3],
+          [x + w * 0.7, y + 2],
+          [x + w - 8, y],
+          [x + w + 2, y + h * 0.3],
+          [x + w - 2, y + h * 0.7],
+          [x + w - 6, y + h],
+          [x + w * 0.6, y + h + 3],
+          [x + w * 0.25, y + h - 2],
+          [x, y + h - 4],
+          [x - 3, y + h * 0.65],
+          [x + 2, y + h * 0.3],
+          [x + 10, y],
+        ];
+        return pts.map(([px, py]) => ({ x: px, y: py }));
+      }
+
+      /* ================= 渲染 ================= */
+
+      function rectAttrs(r) {
+        return `x="${r.x.toFixed(1)}" y="${r.y.toFixed(1)}" width="${Math.max(1, r.w).toFixed(1)}" height="${Math.max(1, r.h).toFixed(1)}"`;
+      }
+
+      function annotationSvg(a) {
+        const sel = a.id === state.selectedId ? " is-selected" : "";
+        if (a.type === "note" && a.target) {
+          return `<rect class="anno-outline${sel}${a.stale ? " is-stale" : ""}" ${rectAttrs(a.target.rect)} rx="10" />`;
+        }
+        if (a.type === "draw" && a.points && a.points.length) {
+          const pts = a.points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+          return `<rect class="draw-bbox" ${rectAttrs(a.bbox)} rx="12" /><polyline class="draw-path${sel}" points="${pts}" />`;
+        }
+        if (a.type === "drag" && a.fromRect && a.toRect) {
+          const f = a.fromRect;
+          const t = a.toRect;
+          const x1 = f.x + f.w / 2;
+          const y1 = f.y + f.h / 2;
+          const x2 = t.x + t.w / 2;
+          const y2 = t.y + t.h / 2;
+          const dx = x2 - x1;
+          const dy = y2 - y1;
+          const len = Math.hypot(dx, dy) || 1;
+          const ux = dx / len;
+          const uy = dy / len;
+          const shrink = Math.min(len * 0.5, Math.min(t.w, t.h) / 2 + 4);
+          const ex = x1 + ux * (len - shrink);
+          const ey = y1 + uy * (len - shrink);
+          return `<rect class="drag-from" ${rectAttrs(f)} rx="10" /><rect class="drag-to${sel}" ${rectAttrs(t)} rx="10" /><line class="drag-arrow" x1="${x1}" y1="${y1}" x2="${ex}" y2="${ey}" />`;
+        }
+        return "";
+      }
+
+      function draftSvg() {
+        const d = state.draft;
+        if (!d) return "";
+        if (d.type === "note" && d.target) {
+          return `<rect class="draft-outline" ${rectAttrs(d.target.rect)} rx="10" />`;
+        }
+        if (d.type === "draw" && d.points && d.points.length) {
+          const pts = d.points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+          return `<polyline class="draft-draw" points="${pts}" />`;
+        }
+        if (d.type === "drag" && d.fromRect && d.toRect) {
+          const f = d.fromRect;
+          const t = d.toRect;
+          const x1 = f.x + f.w / 2;
+          const y1 = f.y + f.h / 2;
+          const x2 = t.x + t.w / 2;
+          const y2 = t.y + t.h / 2;
+          return `<rect class="drag-from" ${rectAttrs(f)} rx="10" /><rect class="drag-to" ${rectAttrs(t)} rx="10" /><line class="drag-arrow" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" />`;
+        }
+        return "";
+      }
+
+      function renderScene() {
+        els.scene.innerHTML = state.annotations.map(annotationSvg).join("") + draftSvg();
+      }
+
+      function scheduleScene() {
+        if (state.sceneFrame) return;
+        state.sceneFrame = requestAnimationFrame(() => {
+          state.sceneFrame = null;
+          renderScene();
+        });
+      }
+
+      function pinPoint(a) {
+        if (a.type === "note" && a.target) {
+          return { x: a.target.rect.x + a.target.rect.w, y: a.target.rect.y };
+        }
+        if (a.type === "draw" && a.bbox) {
+          return { x: a.bbox.x + a.bbox.w, y: a.bbox.y };
+        }
+        if (a.type === "drag" && a.toRect) {
+          return { x: a.toRect.x + a.toRect.w, y: a.toRect.y };
+        }
+        return { x: 0, y: 0 };
+      }
+
+      function renderPins() {
+        els.pinsLayer.innerHTML = state.annotations
+          .map((a) => {
+            const p = pinPoint(a);
+            const cls = `pin ${a.type}${a.id === state.selectedId ? " is-selected" : ""}${a.stale ? " stale" : ""}`;
+            const component = a.target
+              ? a.target.component
+              : a.targets && a.targets[0]
+              ? a.targets[0].component
+              : "区域";
+            const title = `${typeName(a.type)} #${a.num} · ${component}\n${a.note || ""}`;
+            return `<button type="button" class="${cls}" style="left:${p.x.toFixed(1)}px;top:${p.y.toFixed(1)}px" data-id="${a.id}" title="${esc(title)}">${a.num}</button>`;
+          })
+          .join("");
+      }
+
+      function renderList() {
+        if (!state.annotations.length) {
+          els.annotationList.innerHTML = `<div class="flex h-full flex-col items-center justify-center px-5 py-10 text-center">
+            <div class="mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-white/[0.04] ring-1 ring-white/[0.08]">
+              <svg class="h-5 w-5 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 19l7-7 3 3-7 7-3-3z" />
+                <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
+                <path d="M2 2l7.586 7.586" />
+              </svg>
+            </div>
+            <p class="text-[12px] font-medium text-slate-200">还没有标注</p>
+            <p class="mt-1 text-[10px] leading-relaxed text-slate-500">切到「旁注」点击页面元素，<br />或用「圈画」圈出要修改的区域。</p>
+            <button type="button" id="loadDemo" class="btn-ghost mt-4 rounded-lg px-3 py-1.5 text-[10px]">载入 3 条示例标注</button>
+          </div>`;
+          return;
+        }
+
+        els.annotationList.innerHTML = state.annotations
+          .map((a) => {
+            const targets = a.targets || [];
+            const title =
+              a.type === "note"
+                ? a.target
+                  ? a.target.component
+                  : "元素已失效"
+                : a.type === "draw"
+                ? `区域圈画${targets.length ? ` · ${targets.length} 个元素` : ""}`
+                : a.target
+                ? a.target.component
+                : "元素已失效";
+            const source =
+              a.type === "draw"
+                ? targets[0]
+                  ? targets[0].source
+                  : "未命中元素"
+                : a.target
+                ? a.target.source
+                : "";
+            const meta =
+              a.type === "drag" && a.delta
+                ? `位移 Δx ${fmtDelta(a.delta.dx)} · Δy ${fmtDelta(a.delta.dy)}`
+                : a.type === "draw" && a.bbox
+                ? `区域 ${Math.round(a.bbox.w)} × ${Math.round(a.bbox.h)}`
+                : "";
+            const status = a.stale
+              ? `<span class="status-chip stale">元素失效</span>`
+              : a.status === "applied"
+              ? `<span class="status-chip applied">已应用</span>`
+              : `<span class="status-chip pending">待提交</span>`;
+            return `<div class="anno-card${a.id === state.selectedId ? " is-selected" : ""}" data-id="${a.id}">
+              <div class="flex gap-2.5">
+                <span class="anno-num ${a.type}">${a.num}</span>
+                <div class="min-w-0 flex-1">
+                  <div class="flex min-w-0 items-center gap-1.5">
+                    <span class="truncate text-[11px] font-medium text-slate-200">${esc(typeName(a.type))} · ${esc(title)}</span>
+                    <span class="shrink-0">${status}</span>
+                  </div>
+                  <p class="clamp-2 mt-1 text-[10px] leading-relaxed text-slate-400">${esc(a.note || defaultNote(a))}</p>
+                  ${source ? `<div class="mt-1.5 truncate font-mono text-[9px] text-slate-600">${esc(source)}</div>` : ""}
+                  ${meta ? `<div class="mt-1 font-mono text-[9px] text-slate-500">${esc(meta)}</div>` : ""}
+                </div>
+                <button type="button" class="-mr-1 -mt-1 grid h-6 w-6 shrink-0 place-items-center rounded-md text-slate-600 hover:bg-white/[0.06] hover:text-rose-300" data-delete="${a.id}" title="删除标注" aria-label="删除标注">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /></svg>
+                </button>
+              </div>
+            </div>`;
+          })
+          .join("");
+      }
+
+      function render() {
+        state.annotations.forEach((a, i) => {
+          a.num = i + 1;
+        });
+        renderScene();
+        renderPins();
+        renderList();
+        updateCounts();
+      }
+
+      function updateCounts() {
+        const n = state.annotations.length;
+        els.countBadge.textContent = String(n);
+        els.panelCount.textContent = String(n);
+        const disabled = n === 0 || state.submitting;
+        els.submitBtn.disabled = disabled;
+        els.panelSubmit.disabled = disabled;
+        const label = state.submitting ? "分析中…" : "保存并提交";
+        els.submitLabel.textContent = label;
+        els.panelSubmitLabel.textContent = label;
+        els.undoBtn.disabled = n === 0 || state.submitting;
+        els.clearBtn.disabled = n === 0 || state.submitting;
+        els.lastResultBtn.classList.toggle("hidden", !state.lastPrompt);
+      }
+
+      /* ================= 标注操作 ================= */
+
+      function annotationRect(a) {
+        if (a.type === "note" && a.target) return a.target.rect;
+        if (a.type === "draw" && a.bbox) return a.bbox;
+        if (a.type === "drag" && a.toRect) return a.toRect;
+        return null;
+      }
+
+      function centerOn(id) {
+        const a = state.annotations.find((x) => x.id === id);
+        const r = a && annotationRect(a);
+        if (!r) return;
+        const cr = els.canvas.getBoundingClientRect();
+        els.world.classList.add("is-animating");
+        state.pan.x = cr.width / 2 - (r.x + r.w / 2) * state.zoom;
+        state.pan.y = cr.height / 2 - (r.y + r.h / 2) * state.zoom;
+        state.userMoved = true;
+        applyTransform();
+        setTimeout(() => els.world.classList.remove("is-animating"), 320);
+      }
+
+      function selectAnnotation(id, doCenter = true) {
+        if (state.draft) closeComposer(true);
+        state.selectedId = id;
+        render();
+        if (doCenter) centerOn(id);
+        const card = $(`.anno-card[data-id="${id}"]`);
+        if (card) card.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
+
+      function addAnnotation(a) {
+        if (state.submitting) return null;
+        const id = `a_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+        state.annotations.push({
+          ...a,
+          id,
+          num: state.annotations.length + 1,
+          status: "pending",
+          stale: false,
+          createdAt: Date.now(),
+        });
+        state.selectedId = id;
+        render();
+        return id;
+      }
+
+      function deleteAnnotation(id) {
+        if (state.submitting) return;
+        state.annotations = state.annotations.filter((a) => a.id !== id);
+        if (state.selectedId === id) state.selectedId = null;
+        render();
+        showToast("已删除标注");
+      }
+
+      function undo() {
+        if (state.submitting) return;
+        if (state.draft) {
+          closeComposer(true);
+          return;
+        }
+        const last = state.annotations.pop();
+        if (!last) return;
+        if (state.selectedId === last.id) state.selectedId = null;
+        render();
+        showToast("已撤销上一条标注");
+      }
+
+      function handleClear() {
+        if (state.submitting || !state.annotations.length) return;
+        if (!state.clearArmed) {
+          state.clearArmed = true;
+          els.clearBtn.textContent = "再次点击";
+          els.clearBtn.classList.add("clear-armed");
+          setTimeout(() => {
+            state.clearArmed = false;
+            els.clearBtn.textContent = "清空";
+            els.clearBtn.classList.remove("clear-armed");
+          }, 2600);
+          return;
+        }
+        state.annotations = [];
+        state.selectedId = null;
+        state.clearArmed = false;
+        els.clearBtn.textContent = "清空";
+        els.clearBtn.classList.remove("clear-armed");
+        render();
+        showToast("已清空所有标注");
+      }
+
+      /* ================= 模式与悬停 ================= */
+
+      function setMode(mode) {
+        if (state.submitting) return;
+        if (state.draft) closeComposer(true);
+        state.mode = mode;
+        state.gesture = null;
+        state.space = false;
+        document.body.classList.remove("is-panning");
+        document.body.dataset.mode = mode;
+        $$(".mode-btn").forEach((b) => {
+          const active = b.dataset.mode === mode;
+          b.classList.toggle("is-active", active);
+          b.setAttribute("aria-pressed", String(active));
+        });
+        const meta = MODE_META[mode];
+        els.modeHint.textContent = meta.hint;
+        els.canvasModeLabel.textContent = meta.label;
+        hideHover();
+        renderScene();
+      }
+
+      function hideHover() {
+        els.hoverBox.classList.remove("is-visible");
+      }
+
+      function updateHover(clientX, clientY) {
+        if (!["note", "draw", "drag"].includes(state.mode) || state.draft || state.gesture) {
+          hideHover();
+          return;
+        }
+        const t = getTargetAt(clientX, clientY);
+        if (!t) {
+          hideHover();
+          return;
+        }
+        els.hoverBox.style.left = `${t.rect.x}px`;
+        els.hoverBox.style.top = `${t.rect.y}px`;
+        els.hoverBox.style.width = `${t.rect.w}px`;
+        els.hoverBox.style.height = `${t.rect.h}px`;
+        els.hoverLabel.textContent = `${t.component} · ${t.source}`;
+        els.hoverBox.classList.add("is-visible");
+      }
+
+      /* ================= 旁注编辑框 ================= */
+
+      function composerAnchor(d) {
+        if (d.type === "note" && d.target) return d.target.rect;
+        if (d.type === "draw" && d.bbox) return d.bbox;
+        if (d.type === "drag" && d.toRect) return d.toRect;
+        return { x: 0, y: 0, w: 1, h: 1 };
+      }
+
+      function openComposer(draft) {
+        state.draft = draft;
+        const rect = composerAnchor(draft);
+        const s = worldToScreen({ x: rect.x + rect.w, y: rect.y });
+        const w = 320;
+        const h = 210;
+        let left = s.x + 18;
+        if (left + w > window.innerWidth - 16) left = Math.max(16, s.x - w - 18);
+        const top = clamp(s.y - 8, 74, window.innerHeight - h - 16);
+        els.composer.style.left = `${left}px`;
+        els.composer.style.top = `${top}px`;
+        els.composerType.className = `composer-type ${draft.type}`;
+        els.composerType.textContent = typeName(draft.type);
+        els.composerTarget.textContent =
+          draft.type === "draw"
+            ? `${draft.targets.length} 个元素 · ${Math.round(draft.bbox.w)}×${Math.round(draft.bbox.h)}`
+            : draft.target
+            ? `${draft.target.component} · ${draft.target.source}`
+            : "未命中元素";
+        els.composerInput.value = draft.initialNote || "";
+        els.composerHint.textContent =
+          draft.type === "note"
+            ? "旁注内容为必填 · ⌘/Ctrl + Enter 保存"
+            : "可选：补充修改意图 · ⌘/Ctrl + Enter 保存";
+        els.composer.classList.add("is-open");
+        updateComposerSave();
+        requestAnimationFrame(() => els.composerInput.focus());
+        renderScene();
+      }
+
+      function updateComposerSave() {
+        const d = state.draft;
+        if (!d) return;
+        els.composerSave.disabled = d.type === "note" && !els.composerInput.value.trim();
+      }
+
+      function closeComposer(cancel = true) {
+        els.composer.classList.remove("is-open");
+        if (cancel) state.draft = null;
+        state.gesture = null;
+        document.body.classList.remove("is-panning");
+        renderScene();
+      }
+
+      function saveComposer() {
+        if (state.submitting) return;
+        const d = state.draft;
+        if (!d) return;
+        const text = els.composerInput.value.trim();
+        if (d.type === "note" && !text) {
+          els.composerInput.focus();
+          showToast("旁注内容不能为空");
+          return;
+        }
+        let annotation = null;
+        if (d.type === "note") {
+          annotation = { type: "note", target: d.target, note: text };
+        } else if (d.type === "draw") {
+          annotation = {
+            type: "draw",
+            points: d.points,
+            bbox: d.bbox,
+            targets: d.targets,
+            note: text,
+          };
+        } else if (d.type === "drag") {
+          annotation = {
+            type: "drag",
+            target: d.target,
+            delta: d.delta,
+            fromRect: d.fromRect,
+            toRect: d.toRect,
+            note: text,
+          };
+        }
+        if (!annotation) return;
+        state.draft = null;
+        els.composer.classList.remove("is-open");
+        addAnnotation(annotation);
+        showToast(`已添加${typeName(annotation.type)}标注`);
+      }
+
+      /* ================= 指针交互 ================= */
+
+      function capturePointer(target, e) {
+        try {
+          target.setPointerCapture(e.pointerId);
+        } catch (err) {
+          /* 忽略不支持 pointer capture 的环境 */
+        }
+      }
+
+      function startPan(e) {
+        state.gesture = {
+          type: "pan",
+          sx: e.clientX,
+          sy: e.clientY,
+          px: state.pan.x,
+          py: state.pan.y,
+        };
+        state.userMoved = true;
+        document.body.classList.add("is-panning");
+        capturePointer(e.currentTarget || els.canvas, e);
+        hideHover();
+      }
+
+      function onCanvasPointerDown(e) {
+        if (e.button === 1) {
+          e.preventDefault();
+          startPan(e);
+          return;
+        }
+        if (state.space) {
+          e.preventDefault();
+          startPan(e);
+          return;
+        }
+        if (e.target === els.canvas) startPan(e);
+      }
+
+      function onCapturePointerDown(e) {
+        if (state.submitting) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.button === 1 || state.space || state.mode === "hand") {
+          startPan(e);
+          return;
+        }
+        if (state.mode === "note") {
+          const target = getTargetAt(e.clientX, e.clientY);
+          if (target) openComposer({ type: "note", target, initialNote: "" });
+          else closeComposer(true);
+          return;
+        }
+        if (state.mode === "draw") {
+          const p = screenToWorld(e.clientX, e.clientY);
+          capturePointer(els.capture, e);
+          state.draft = {
+            type: "draw",
+            points: [p],
+            bbox: { x: p.x, y: p.y, w: 0, h: 0 },
+            targets: [],
+          };
+          state.gesture = { type: "draw" };
+          renderScene();
+          return;
+        }
+        if (state.mode === "drag") {
+          const target = getTargetAt(e.clientX, e.clientY);
+          if (!target) return;
+          const start = screenToWorld(e.clientX, e.clientY);
+          capturePointer(els.capture, e);
+          state.draft = {
+            type: "drag",
+            target,
+            fromRect: { ...target.rect },
+            toRect: { ...target.rect },
+            delta: { dx: 0, dy: 0 },
+            initialNote: "",
+          };
+          state.gesture = { type: "drag", start };
+          renderScene();
+        }
+      }
+
+      function onPointerMove(e) {
+        const g = state.gesture;
+        if (!g) {
+          updateHover(e.clientX, e.clientY);
+          return;
+        }
+        if (g.type === "pan") {
+          state.pan.x = g.px + (e.clientX - g.sx);
+          state.pan.y = g.py + (e.clientY - g.sy);
+          applyTransform();
+          return;
+        }
+        if (g.type === "draw" && state.draft) {
+          const p = screenToWorld(e.clientX, e.clientY);
+          const pts = state.draft.points;
+          const last = pts[pts.length - 1];
+          if (Math.hypot(p.x - last.x, p.y - last.y) < 1.5) return;
+          pts.push(p);
+          state.draft.bbox = bboxOf(pts);
+          scheduleScene();
+          return;
+        }
+        if (g.type === "drag" && state.draft) {
+          const p = screenToWorld(e.clientX, e.clientY);
+          const dx = p.x - g.start.x;
+          const dy = p.y - g.start.y;
+          state.draft.delta = { dx, dy };
+          state.draft.toRect = {
+            ...state.draft.fromRect,
+            x: state.draft.fromRect.x + dx,
+            y: state.draft.fromRect.y + dy,
+          };
+          scheduleScene();
+        }
+      }
+
+      function onPointerUp() {
+        const g = state.gesture;
+        if (!g) return;
+        state.gesture = null;
+        document.body.classList.remove("is-panning");
+        if (g.type === "pan") return;
+        if (g.type === "draw" && state.draft) {
+          const d = state.draft;
+          if (d.points.length < 2 || d.bbox.w < 8 || d.bbox.h < 8) {
+            state.draft = null;
+            renderScene();
+            return;
+          }
+          d.targets = elementsInBox(d.bbox);
+          openComposer(d);
+          return;
+        }
+        if (g.type === "drag" && state.draft) {
+          const d = state.draft;
+          if (Math.hypot(d.delta.dx, d.delta.dy) < 6) {
+            state.draft = null;
+            renderScene();
+            return;
+          }
+          d.initialNote = d.target
+            ? `将 ${d.target.component} 移动到目标位置`
+            : "移动元素到目标位置";
+          openComposer(d);
+        }
+      }
+
+      /* ================= 提交与 Agent ================= */
+
+      function cleanRect(r) {
+        return r
+          ? { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h) }
+          : null;
+      }
+
+      function cleanTarget(t) {
+        return t
+          ? {
+              source: t.source,
+              component: t.component,
+              instance: t.index,
+              rect: cleanRect(t.rect),
+            }
+          : null;
+      }
+
+      function buildPayload() {
+        return {
+          project: "vibe-demo",
+          framework: "react",
+          viewport: { width: 1200, height: 772 },
+          annotations: state.annotations.map((a) => {
+            const base = { id: a.id, type: a.type, intent: a.note || defaultNote(a) };
+            if (a.type === "note") base.target = cleanTarget(a.target);
+            if (a.type === "draw") {
+              base.targets = (a.targets || []).map(cleanTarget);
+              base.bbox = cleanRect(a.bbox);
+              base.stroke = (a.points || []).map((p) => ({ x: Math.round(p.x), y: Math.round(p.y) }));
+            }
+            if (a.type === "drag") {
+              base.target = cleanTarget(a.target);
+              base.delta = { dx: Math.round(a.delta.dx), dy: Math.round(a.delta.dy) };
+              base.from = cleanRect(a.fromRect);
+              base.to = cleanRect(a.toRect);
+            }
+            return base;
+          }),
+        };
+      }
+
+      function buildPrompt(payload) {
+        const files = [
+          ...new Set(
+            payload.annotations
+              .flatMap((a) => {
+                const list = [];
+                if (a.target) list.push(a.target.source);
+                (a.targets || []).forEach((t) => t && list.push(t.source));
+                return list;
+              })
+              .filter(Boolean)
+          ),
+        ];
+        const lines = payload.annotations
+          .map((a, i) => {
+            if (a.type === "note") {
+              return `${i + 1}. [旁注] 目标 ${a.target ? a.target.source : "未知"} — ${a.intent}`;
+            }
+            if (a.type === "draw") {
+              const names = a.targets
+                .map((t) => (t ? t.source : ""))
+                .filter(Boolean)
+                .join("、");
+              return `${i + 1}. [圈画] 覆盖 ${names || "未识别元素"} — ${a.intent}`;
+            }
+            return `${i + 1}. [拖拽] 目标 ${a.target ? a.target.source : "未知"}，位移 dx=${a.delta.dx}, dy=${a.delta.dy} — ${a.intent}`;
+          })
+          .join("\n");
+        return [
+          "你是一个资深 React 前端工程师。请根据下面的可视化标注修改项目代码。",
+          "",
+          "## 项目约束",
+          "- 项目：vibe-demo（React 单页应用，视口 1200×772）",
+          "- 仅修改被标注的组件/文件，保持现有组件 API 与数据结构不变。",
+          "- 优先使用 Tailwind CSS 类名完成样式修改；不要引入新依赖。",
+          "- 输出 unified diff；不要输出解释性文字。",
+          "- 若标注信息不足，先提出澄清问题，不要猜测。",
+          "",
+          "## 目标文件",
+          files.length ? files.map((f) => `- ${f}`).join("\n") : "- 未识别",
+          "",
+          "## 用户标注",
+          lines,
+          "",
+          "## 结构化数据",
+          "```json",
+          JSON.stringify(payload, null, 2),
+          "```",
+          "",
+          "请逐条实现上述标注的修改意图。",
+        ].join("\n");
+      }
+
+      function openAgentModal() {
+        els.agentModal.classList.add("is-open");
+        els.agentSteps.innerHTML = AGENT_STEPS.map(
+          (s, i) => `<div class="step" data-step="${i}">
+            <span class="step-dot"></span>
+            <div class="min-w-0 flex-1">
+              <div class="step-title text-[11px] font-medium text-slate-300">${esc(s.label)}</div>
+              <div class="step-detail mt-0.5 text-[9px] text-slate-500">${esc(s.detail)}</div>
+            </div>
+            <span class="step-state">等待</span>
+          </div>`
+        ).join("");
+        els.agentResult.classList.add("hidden");
+        els.modalClose.disabled = true;
+      }
+
+      function setStep(i, status) {
+        const el = els.agentSteps.querySelector(`[data-step="${i}"]`);
+        if (!el) return;
+        el.classList.toggle("is-active", status === "active");
+        el.classList.toggle("is-done", status === "done");
+        const stateEl = el.querySelector(".step-state");
+        stateEl.className = `step-state ${status === "active" ? "active" : status === "done" ? "done" : ""}`;
+        stateEl.textContent = status === "active" ? "进行中" : status === "done" ? "完成" : "等待";
+      }
+
+      function updateResultView() {
+        els.resultPre.textContent = state.resultTab === "prompt" ? state.lastPrompt : state.lastJson;
+        $$(".result-tab").forEach((b) => {
+          b.classList.toggle("is-active", b.dataset.tab === state.resultTab);
+        });
+      }
+
+      function showResult() {
+        els.agentResult.classList.remove("hidden");
+        els.modalClose.disabled = false;
+        state.resultTab = "prompt";
+        updateResultView();
+        const files = new Set();
+        state.annotations.forEach((a) => {
+          if (a.target) files.add(a.target.source);
+          (a.targets || []).forEach((t) => t && files.add(t.source));
+        });
+        els.resultMeta.textContent = `${state.annotations.length} 条标注 · ${files.size} 个目标文件`;
+        els.lastResultBtn.classList.remove("hidden");
+        setTimeout(() => {
+          els.agentResult.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }, 100);
+      }
+
+      async function runAgent() {
+        state.submitting = true;
+        state.processing = true;
+        updateCounts();
+        const payload = buildPayload();
+        state.lastPrompt = buildPrompt(payload);
+        state.lastJson = JSON.stringify(payload, null, 2);
+        openAgentModal();
+        for (let i = 0; i < AGENT_STEPS.length; i += 1) {
+          setStep(i, "active");
+          await sleep(AGENT_STEPS[i].ms);
+          setStep(i, "done");
+        }
+        state.processing = false;
+        state.submitting = false;
+        updateCounts();
+        showResult();
+      }
+
+      function submit() {
+        if (state.submitting || !state.annotations.length) return;
+        if (state.draft) {
+          showToast("请先保存或取消当前标注");
+          return;
+        }
+        runAgent();
+      }
+
+      function closeAgentModal() {
+        if (state.processing) return;
+        els.agentModal.classList.remove("is-open");
+      }
+
+      function openLastResult() {
+        if (!state.lastPrompt) return;
+        openAgentModal();
+        AGENT_STEPS.forEach((_, i) => setStep(i, "done"));
+        state.processing = false;
+        showResult();
+      }
+
+      function reanchor() {
+        if (!state.previewReady || !els.preview.contentDocument) return;
+        state.annotations.forEach((a) => {
+          if (a.type === "draw") {
+            a.targets = (a.targets || []).map((t) => {
+              const el = resolveTarget(t);
+              return el ? targetFromEl(el) : { ...t, stale: true };
+            });
+            a.stale = a.targets.length > 0 && a.targets.every((t) => t.stale);
+          } else if (a.target) {
+            const el = resolveTarget(a.target);
+            if (el) {
+              a.target = targetFromEl(el);
+              a.stale = false;
+            } else {
+              a.stale = true;
+            }
+          }
+        });
+      }
+
+      async function applyGeneratedChanges() {
+        closeAgentModal();
+        els.refreshOverlay.classList.add("is-open");
+        await sleep(1300);
+        const doc = els.preview.contentDocument;
+        if (doc) {
+          const sources = new Set();
+          state.annotations.forEach((a) => {
+            if (a.target) sources.add(a.target.source);
+            (a.targets || []).forEach((t) => t && sources.add(t.source));
+          });
+          const has = (part) => [...sources].some((s) => s.includes(part));
+
+          if (has("PrimaryButton")) {
+            const btn = doc.querySelector('[data-source^="src/components/PrimaryButton.tsx"]');
+            if (btn) {
+              btn.innerHTML =
+                '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14" /><path d="M5 12h14" /></svg> New Project';
+              btn.style.background = "#4f46e5";
+              btn.classList.remove("flash");
+              void btn.offsetWidth;
+              btn.classList.add("flash");
+            }
+          }
+
+          if (has("StatCard")) {
+            const stats = doc.querySelector(".stats");
+            if (stats) stats.style.gap = "18px";
+            doc.querySelectorAll('[data-source^="src/components/StatCard.tsx"]').forEach((card) => {
+              card.style.borderColor = "#c7d2fe";
+              card.style.borderRadius = "16px";
+              card.classList.remove("flash");
+              void card.offsetWidth;
+              card.classList.add("flash");
+            });
+          }
+
+          if (has("RevenueChart")) {
+            const chart = doc.querySelector('[data-source^="src/components/RevenueChart.tsx"]');
+            if (chart) {
+              chart.style.borderColor = "#c7d2fe";
+              chart.classList.remove("flash");
+              void chart.offsetWidth;
+              chart.classList.add("flash");
+            }
+          }
+
+          if (has("RecentProjects")) {
+            const table = doc.querySelector('[data-source^="src/components/RecentProjects.tsx"]');
+            if (table) {
+              table.classList.remove("flash");
+              void table.offsetWidth;
+              table.classList.add("flash");
+            }
+          }
+        }
+        state.annotations.forEach((a) => {
+          a.status = "applied";
+        });
+        reanchor();
+        state.appliedVersion += 1;
+        els.versionChip.textContent = `v${state.appliedVersion}`;
+        els.refreshOverlay.classList.remove("is-open");
+        render();
+        showToast("预览已刷新 · 修改已应用（模拟外部工具执行）");
+      }
+
+      /* ================= 示例数据 ================= */
+
+      function loadDemoAnnotations() {
+        if (!state.previewReady) {
+          showToast("预览尚未加载完成");
+          return;
+        }
+        const doc = els.preview.contentDocument;
+        if (!doc) return;
+        const btn = doc.querySelector('[data-source^="src/components/PrimaryButton.tsx"]');
+        const cardEls = [...doc.querySelectorAll('[data-source^="src/components/StatCard.tsx"]')];
+        const chart = doc.querySelector('[data-source^="src/components/RevenueChart.tsx"]');
+        if (!btn || !cardEls.length || !chart) {
+          showToast("示例元素未找到");
+          return;
+        }
+        const cards = cardEls.map(targetFromEl);
+        const union = unionRect(cards.map((c) => c.rect));
+        const points = makeLoop(union, 16);
+        const bbox = bboxOf(points);
+        state.annotations = [];
+        state.selectedId = null;
+
+        addAnnotation({
+          type: "note",
+          target: targetFromEl(btn),
+          note: "改成品牌主色，文案改为 “New Project”，并在左侧加一个 + 图标。",
+        });
+        addAnnotation({
+          type: "draw",
+          points,
+          bbox,
+          targets: cards,
+          note: "三张指标卡太挤，请增加卡片间距，并把圆角调到 16px。",
+        });
+        const ct = targetFromEl(chart);
+        addAnnotation({
+          type: "drag",
+          target: ct,
+          delta: { dx: 0, dy: 96 },
+          fromRect: { ...ct.rect },
+          toRect: { ...ct.rect, y: ct.rect.y + 96 },
+          note: "把图表移到指标卡下方，占满整行。",
+        });
+        state.selectedId = null;
+        render();
+        showToast("已载入 3 条示例标注");
+      }
+
+      /* ================= 工具 ================= */
+
+      function showToast(message, duration = 2800) {
+        els.toast.textContent = message;
+        els.toast.classList.add("is-visible");
+        clearTimeout(state.toastTimer);
+        state.toastTimer = setTimeout(() => els.toast.classList.remove("is-visible"), duration);
+      }
+
+      async function copyText(text) {
+        if (!text) return;
+        try {
+          await navigator.clipboard.writeText(text);
+        } catch (err) {
+          const ta = document.createElement("textarea");
+          ta.value = text;
+          ta.style.position = "fixed";
+          ta.style.opacity = "0";
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand("copy");
+          ta.remove();
+        }
+        showToast("已复制到剪贴板");
+      }
+
+      /* ================= 预览绑定 ================= */
+
+      function bindPreviewListeners() {
+        const doc = els.preview.contentDocument;
+        const win = els.preview.contentWindow;
+        if (!doc || !win) return;
+
+        doc.addEventListener(
+          "click",
+          (e) => {
+            const a = e.target.closest && e.target.closest("a");
+            if (a) e.preventDefault();
+          },
+          true
+        );
+
+        win.addEventListener(
+          "wheel",
+          (e) => {
+            e.preventDefault();
+            const r = els.preview.getBoundingClientRect();
+            const sx = r.left + e.clientX * state.zoom;
+            const sy = r.top + e.clientY * state.zoom;
+            handleWheel(sx, sy, e.deltaX, e.deltaY, e.ctrlKey || e.metaKey);
+          },
+          { passive: false }
+        );
+
+        win.addEventListener("keydown", (e) => {
+          const k = e.key.toLowerCase();
+          const isShortcut =
+            e.key === "Escape" ||
+            e.key === "Delete" ||
+            e.key === "Backspace" ||
+            ["v", "h", "n", "p", "d"].includes(k) ||
+            ((e.metaKey || e.ctrlKey) && k === "z");
+          if (!isShortcut) return;
+          // 同源 iframe：直接把快捷键转发给父页面处理
+          document.dispatchEvent(
+            new KeyboardEvent("keydown", {
+              key: e.key,
+              ctrlKey: e.ctrlKey,
+              metaKey: e.metaKey,
+              bubbles: true,
+            })
+          );
+        });
+      }
+
+      function onPreviewLoad() {
+        if (!els.preview.srcdoc) return;
+        state.previewReady = true;
+        bindPreviewListeners();
+        requestAnimationFrame(() => fitView(false));
+        setTimeout(() => {
+          showToast("提示：切到「旁注」，点击画布中的页面元素开始标注", 4200);
+        }, 700);
+      }
+
+      /* ================= 事件绑定 ================= */
+
+      els.canvas.addEventListener(
+        "wheel",
+        (e) => {
+          e.preventDefault();
+          handleWheel(e.clientX, e.clientY, e.deltaX, e.deltaY, e.ctrlKey || e.metaKey);
+        },
+        { passive: false }
+      );
+      els.canvas.addEventListener("pointerdown", onCanvasPointerDown);
+      els.capture.addEventListener("pointerdown", onCapturePointerDown);
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointerup", onPointerUp);
+
+      els.pinsLayer.addEventListener("click", (e) => {
+        const btn = e.target.closest(".pin");
+        if (!btn) return;
+        e.stopPropagation();
+        selectAnnotation(btn.dataset.id, true);
+      });
+
+      els.annotationList.addEventListener("click", (e) => {
+        if (e.target.closest("#loadDemo")) {
+          loadDemoAnnotations();
+          return;
+        }
+        const del = e.target.closest("[data-delete]");
+        if (del) {
+          e.stopPropagation();
+          deleteAnnotation(del.dataset.delete);
+          return;
+        }
+        const card = e.target.closest(".anno-card");
+        if (card) selectAnnotation(card.dataset.id, true);
+      });
+
+      $$(".mode-btn").forEach((btn) => {
+        btn.addEventListener("click", () => setMode(btn.dataset.mode));
+      });
+
+      $("#zoomIn").addEventListener("click", () => zoomCenter(1.2));
+      $("#zoomOut").addEventListener("click", () => zoomCenter(1 / 1.2));
+      $("#fitBtn").addEventListener("click", () => {
+        state.userMoved = false;
+        fitView(true);
+      });
+      els.zoomLabel.addEventListener("click", () => {
+        const r = els.canvas.getBoundingClientRect();
+        state.zoom = 1;
+        state.pan.x = r.width / 2 - 600;
+        state.pan.y = r.height / 2 - 408;
+        state.userMoved = true;
+        applyTransform();
+      });
+
+      els.undoBtn.addEventListener("click", undo);
+      els.clearBtn.addEventListener("click", handleClear);
+      els.submitBtn.addEventListener("click", submit);
+      els.panelSubmit.addEventListener("click", submit);
+      els.lastResultBtn.addEventListener("click", openLastResult);
+
+      els.composerInput.addEventListener("input", updateComposerSave);
+      els.composerSave.addEventListener("click", saveComposer);
+      els.composerCancel.addEventListener("click", () => closeComposer(true));
+      els.composerClose.addEventListener("click", () => closeComposer(true));
+      els.composerInput.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          closeComposer(true);
+        }
+        if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+          e.preventDefault();
+          e.stopPropagation();
+          saveComposer();
+        }
+      });
+
+      els.modalClose.addEventListener("click", closeAgentModal);
+      els.agentModal.addEventListener("click", (e) => {
+        if (e.target === els.agentModal) closeAgentModal();
+      });
+      els.copyBtn.addEventListener("click", () => {
+        copyText(state.resultTab === "prompt" ? state.lastPrompt : state.lastJson);
+      });
+      els.applyBtn.addEventListener("click", applyGeneratedChanges);
+      $$(".result-tab").forEach((b) => {
+        b.addEventListener("click", () => {
+          state.resultTab = b.dataset.tab;
+          updateResultView();
+        });
+      });
+
+      document.addEventListener("keydown", (e) => {
+        if (els.agentModal.classList.contains("is-open")) {
+          if (e.key === "Escape") closeAgentModal();
+          return;
+        }
+        const tag = (e.target && e.target.tagName ? e.target.tagName : "").toLowerCase();
+        const typing = tag === "textarea" || tag === "input";
+        if (e.key === "Escape") {
+          if (state.draft) closeComposer(true);
+          return;
+        }
+        if (typing) return;
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
+          e.preventDefault();
+          undo();
+          return;
+        }
+        if (e.code === "Space") {
+          e.preventDefault();
+          state.space = true;
+          document.body.classList.add("space-pan");
+          return;
+        }
+        const map = { v: "interact", h: "hand", n: "note", p: "draw", d: "drag" };
+        const mode = map[e.key.toLowerCase()];
+        if (mode && !e.metaKey && !e.ctrlKey && !e.altKey) {
+          setMode(mode);
+          return;
+        }
+        if ((e.key === "Backspace" || e.key === "Delete") && state.selectedId) {
+          e.preventDefault();
+          deleteAnnotation(state.selectedId);
+        }
+      });
+
+      document.addEventListener("keyup", (e) => {
+        if (e.code === "Space") {
+          state.space = false;
+          document.body.classList.remove("space-pan");
+        }
+      });
+
+      window.addEventListener("blur", () => {
+        state.space = false;
+        document.body.classList.remove("space-pan");
+      });
+
+      window.addEventListener("resize", () => {
+        if (state.userMoved) applyTransform();
+        else fitView(false);
+      });
+
+      /* ================= 启动 ================= */
+
+      function init() {
+        setMode("interact");
+        render();
+        applyTransform();
+        els.preview.addEventListener("load", onPreviewLoad);
+        els.preview.srcdoc = document.getElementById("demoDoc").innerHTML;
+      }
+
+      init();
+    })();
+  </script>
+</body>
+</html>

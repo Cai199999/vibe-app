@@ -32,3 +32,16 @@ cp .env.example .env   # 按需修改连接串与密钥
 pytest
 black .
 ```
+
+## 阶段二交互原型
+
+单文件可交互原型，用于评审“画布 + 旁注 + 圈画 + 拖拽”的核心交互：
+
+```bash
+cd ~/Workspace/vibe-app
+python3 -m http.server 8080
+# 打开 http://127.0.0.1:8080/docs/prototypes/stage-2-canvas.html
+```
+
+原型仅模拟 Agent 流程，不调用 DeepSeek、不写业务代码。说明与限制见
+[`docs/prototypes/README.md`](docs/prototypes/README.md)。
