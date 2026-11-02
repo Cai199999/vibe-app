@@ -13,18 +13,6 @@ export function useCanvasViewport() {
     zoom: 0.8,
     pan: { x: 80, y: 40 },
   })
-  const viewportRef = useRef(viewport)
-
-  useEffect(() => {
-    viewportRef.current = viewport
-  }, [viewport])
-
-  const panBy = useCallback((dx: number, dy: number) => {
-    setViewport((current) => ({
-      ...current,
-      pan: { x: current.pan.x + dx, y: current.pan.y + dy },
-    }))
-  }, [])
 
   const setPan = useCallback((x: number, y: number) => {
     setViewport((current) => ({ ...current, pan: { x, y } }))
@@ -67,23 +55,34 @@ export function useCanvasViewport() {
     })
   }, [])
 
-  const zoomAt = useCallback((clientX: number, clientY: number, factor: number) => {
-    const element = canvasRef.current
-    if (!element) return
-    const rect = element.getBoundingClientRect()
-    const current = viewportRef.current
-    const worldX = (clientX - rect.left - current.pan.x) / current.zoom
-    const worldY = (clientY - rect.top - current.pan.y) / current.zoom
-    const nextZoom = clamp(current.zoom * factor, MIN_ZOOM, MAX_ZOOM)
+  const zoomAt = useCallback(
+    (clientX: number, clientY: number, factor: number) => {
+      const element = canvasRef.current
+      if (!element) return
+      const rect = element.getBoundingClientRect()
 
-    setViewport({
-      zoom: nextZoom,
-      pan: {
-        x: clientX - rect.left - worldX * nextZoom,
-        y: clientY - rect.top - worldY * nextZoom,
-      },
-    })
-  }, [])
+      // 使用函数式更新读取最新视口。
+      // 滚轮/触控板会在一帧内连发多个事件，若读取旧 state 会
+      // 反复按同一个基准点计算，导致缩放锚点漂移、步进失真。
+      setViewport((current) => {
+        const nextZoom = clamp(current.zoom * factor, MIN_ZOOM, MAX_ZOOM)
+        if (nextZoom === current.zoom) return current
+
+        const worldX = (clientX - rect.left - current.pan.x) / current.zoom
+        const worldY = (clientY - rect.top - current.pan.y) / current.zoom
+
+        return {
+          zoom: nextZoom,
+          pan: {
+            // 保持鼠标指向的世界坐标不动，避免缩放时内容漂移。
+            x: clientX - rect.left - worldX * nextZoom,
+            y: clientY - rect.top - worldY * nextZoom,
+          },
+        }
+      })
+    },
+    [],
+  )
 
   const zoomBy = useCallback(
     (factor: number) => {
@@ -103,7 +102,6 @@ export function useCanvasViewport() {
   return {
     canvasRef,
     viewport,
-    panBy,
     setPan,
     fit,
     resetZoom,

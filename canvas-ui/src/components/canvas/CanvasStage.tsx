@@ -80,6 +80,21 @@ const MODE_LABEL: Record<Mode, string> = {
   drag: '拖拽模式',
 }
 
+/** 滚轮缩放手感：按像素增量做指数缩放，避免触控板连发事件时突进。 */
+const WHEEL_ZOOM_SENSITIVITY = 0.0006
+/** 单次滚轮事件的最大等效像素，防止某些设备一次抛出超大 delta。 */
+const MAX_WHEEL_DELTA = 120
+
+function normalizeWheelDelta(event: WheelEvent, pageHeight: number): number {
+  if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) {
+    return event.deltaY * 16
+  }
+  if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) {
+    return event.deltaY * pageHeight
+  }
+  return event.deltaY
+}
+
 function isInsideIframe(point: Point): boolean {
   return (
     point.x >= 0 &&
@@ -137,7 +152,6 @@ export function CanvasStage({
   const {
     canvasRef,
     viewport,
-    panBy,
     setPan,
     fit,
     resetZoom,
@@ -627,9 +641,12 @@ export function CanvasStage({
       }
 
       if (gesture.kind === 'pan') {
-        panBy(
-          event.clientX - gesture.startX,
-          event.clientY - gesture.startY,
+        // 以按下时的视口为基准计算总位移。
+        // 不能用“当前点 - 起点”反复累加，否则每个 pointermove
+        // 都会把之前的位移再加一遍，表现为越拖越快、逐渐漂移。
+        setPan(
+          gesture.startPan.x + (event.clientX - gesture.startX),
+          gesture.startPan.y + (event.clientY - gesture.startY),
         )
         return
       }
@@ -660,7 +677,7 @@ export function CanvasStage({
         toRect: offsetRect(gesture.fromRect, delta.x, delta.y),
       })
     },
-    [panBy, screenPointToWorld, updateHover],
+    [setPan, screenPointToWorld, updateHover],
   )
 
   const onCanvasPointerUp = useCallback(
@@ -759,8 +776,16 @@ export function CanvasStage({
       // 工作区本身固定：滚轮只改变 artboard 的 transform，不滚动页面。
       event.preventDefault()
       if (event.deltaY === 0) return
-      // 按产品要求反向：上滑缩小，下滑放大。
-      const factor = event.deltaY > 0 ? 1.08 : 0.92
+
+      // 统一不同设备的 delta 单位，并限制单次步进。
+      // 指数缩放让鼠标滚轮与触控板都保持线性手感。
+      const delta = clamp(
+        normalizeWheelDelta(event, element.clientHeight),
+        -MAX_WHEEL_DELTA,
+        MAX_WHEEL_DELTA,
+      )
+      // 按产品要求反向：上滑（deltaY < 0）缩小，下滑放大。
+      const factor = Math.exp(delta * WHEEL_ZOOM_SENSITIVITY)
       zoomAt(event.clientX, event.clientY, factor)
     }
 
