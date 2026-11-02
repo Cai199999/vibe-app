@@ -23,7 +23,7 @@
 
 检查后发现仓库此前只有设计文档与 Mock，并不存在可用的 Vite 插件 / SDK。本次新增：
 
-- `vibe-plugin/`：dev-only Vite 插件
+- `vite-plugin-vibe/`：dev-only Vite 插件
   - Babel 解析 `.jsx/.tsx`，给每个 JSXOpeningElement 注入
     `data-source="相对路径:行:列"`、`data-source-kind`、`data-component`；
   - 生成并维护 JSX 片段注册表；
@@ -72,4 +72,4 @@
 - 真实 DeepSeek Provider 联调与 Prompt 质量评估。
 - `localStorage` 标注历史、HMR 后标注失效标记。
 - 手动截图上传（1 MB）与图片压缩。
-- 将 `vibe-plugin` 发布到私有 npm 或接入 monorepo workspace。
+- 将 `vite-plugin-vibe` 发布到私有 npm 或接入 monorepo workspace。

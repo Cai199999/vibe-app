@@ -9,7 +9,7 @@
 | 目录 | 作用 |
 |---|---|
 | `canvas-ui/` | 画布、标注、右侧 Prompt 工作台、L3 调用 |
-| `vibe-plugin/` | Vite dev 插件 + 浏览器 SDK：注入 `data-source`、握手、快照、命中、片段 |
+| `vite-plugin-vibe/` | Vite dev 插件 + 浏览器 SDK：注入 `data-source`、握手、快照、命中、片段 |
 | `examples/vite-demo/` | 可直接运行的 Vite + React 验证项目 |
 
 ## 快速启动
@@ -43,7 +43,7 @@ npm run dev
 
 ```bash
 cd ~/Workspace/your-app
-npm install -D file:/home/admin1/Workspace/vibe-app/vibe-plugin
+npm install -D file:/home/admin1/Workspace/vibe-app/vite-plugin-vibe
 ```
 
 ```js
@@ -245,7 +245,7 @@ canvas-ui/
 └── vite.config.ts               # 127.0.0.1:5174，strictPort
 ```
 
-`vibe-plugin/` 与 `examples/vite-demo/` 在仓库根目录；详见 `vibe-plugin/README.md`。
+`vite-plugin-vibe/` 与 `examples/vite-demo/` 在仓库根目录；详见 `vite-plugin-vibe/README.md`。
 
 ## 数据与安全约束
 
@@ -278,7 +278,7 @@ npm run build
 npm run lint
 
 # 插件 + 示例
-cd ../vibe-plugin && npm install
+cd ../vite-plugin-vibe && npm install
 cd ../examples/vite-demo && npm install && npm run build
 
 # 后端测试

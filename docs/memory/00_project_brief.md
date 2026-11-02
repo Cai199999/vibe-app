@@ -136,7 +136,7 @@ flowchart LR
 | 缓存 | Redis | 已有 Docker；MVP 不依赖 |
 | 对象存储 | MinIO | 已有 Docker；MVP 不落盘图片 |
 | 画布工具 | Vite 8 + React 19 + TypeScript + TailwindCSS 4 | `canvas-ui/` 已实现画布、标注、L3 联调 |
-| 用户项目 | Vite + React + 自动注入 SDK + Vite 插件 | `vibe-plugin/` 已实现；`examples/vite-demo/` 可验证 |
+| 用户项目 | Vite + React + 自动注入 SDK + Vite 插件 | `vite-plugin-vibe/` 已实现；`examples/vite-demo/` 可验证 |
 | 预览桥接 | 跨域 iframe + `postMessage` | 已接真实 Vite 项目；动态 Origin + SDK 握手 |
 | 大模型 | DeepSeek API | 可选接入；当前 Mock Markdown |
 | 配置 | pydantic-settings + `.env` | 已就绪 |
@@ -226,7 +226,7 @@ flowchart LR
 - [ ] 阶段四：更多页面类型的 Prompt 质量评估
 - [ ] 阶段四：`localStorage` 历史、失效标注重定位
 
-> 当前业务代码包含 `app/`（FastAPI L3）、`canvas-ui/`（React 画布）、`vibe-plugin/`（Vite 插件 + SDK）与 `examples/vite-demo/`（验证项目）。画布入口页可二选一：加载本地 Vite 项目，或直接进入截图工作区（跳过 3 秒握手）；源码项目加载后 3 秒内探测 SDK：成功为源码模式，失败自动降级为仅视觉模式；顶部主页图标可退出并重新选择；源码模式支持旁注/圈画/拖拽与 L3 联调；仅视觉模式需上传 / 粘贴截图，前端把截图与红色手绘轨迹合成后以 `image_base64` 提交：有红圈时只发送包围盒并集外扩 20% 的局部图，无红圈发送全图，大图自动使用 JPEG 0.8 并保证 ≤ 1 MB，后端切换到 `deepseek-flash`。项目加载默认仅限本机回环地址；根目录 `.env` 的 `ALLOW_REMOTE_PROJECTS=true` 可开启局域网 / 远程加载，前后端都会校验 http(s) Host 并拦截基础设施端口，当前仍只支持 Vite + React。发送模型前默认执行文本脱敏（`REDACT_SENSITIVE=true`），邮箱、手机号、AK/SK、Authorization、URL 内嵌密码、JWT 等替换为 `[REDACTED]`，UUID 与 MD5 / SHA1 摘要豁免，文件路径与图片 Base64 保留；模型可通过 `LLM_PROVIDER=deepseek|ollama` 切换，Ollama 支持本地 / 局域网地址，视觉模式需配置 `OLLAMA_VISION_MODEL`，超长 JSX 会按 `OLLAMA_MAX_SNIPPET_CHARS` 截断；视觉模式界面常驻提示截图像素内容无法脱敏。交互模式下的 iframe 内输入事件仍由用户页面接管，这是浏览器跨域 iframe 的固有限制；SDK 通过只含 `sessionToken` 的 `PAGE_FOCUS` 信号通知画布“正在浏览网页”，顶部 URL 条高亮「浏览中」；点击父页面任意区域即回收 DOM 焦点并恢复画布快捷键；URL 条复制按钮只复制原始项目地址，不带 `__vibe_host`。
+> 当前业务代码包含 `app/`（FastAPI L3）、`canvas-ui/`（React 画布）、`vite-plugin-vibe/`（Vite 插件 + SDK）与 `examples/vite-demo/`（验证项目）。画布入口页可二选一：加载本地 Vite 项目，或直接进入截图工作区（跳过 3 秒握手）；源码项目加载后 3 秒内探测 SDK：成功为源码模式，失败自动降级为仅视觉模式；顶部主页图标可退出并重新选择；源码模式支持旁注/圈画/拖拽与 L3 联调；仅视觉模式需上传 / 粘贴截图，前端把截图与红色手绘轨迹合成后以 `image_base64` 提交：有红圈时只发送包围盒并集外扩 20% 的局部图，无红圈发送全图，大图自动使用 JPEG 0.8 并保证 ≤ 1 MB，后端切换到 `deepseek-flash`。项目加载默认仅限本机回环地址；根目录 `.env` 的 `ALLOW_REMOTE_PROJECTS=true` 可开启局域网 / 远程加载，前后端都会校验 http(s) Host 并拦截基础设施端口，当前仍只支持 Vite + React。发送模型前默认执行文本脱敏（`REDACT_SENSITIVE=true`），邮箱、手机号、AK/SK、Authorization、URL 内嵌密码、JWT 等替换为 `[REDACTED]`，UUID 与 MD5 / SHA1 摘要豁免，文件路径与图片 Base64 保留；模型可通过 `LLM_PROVIDER=deepseek|ollama` 切换，Ollama 支持本地 / 局域网地址，视觉模式需配置 `OLLAMA_VISION_MODEL`，超长 JSX 会按 `OLLAMA_MAX_SNIPPET_CHARS` 截断；视觉模式界面常驻提示截图像素内容无法脱敏。交互模式下的 iframe 内输入事件仍由用户页面接管，这是浏览器跨域 iframe 的固有限制；SDK 通过只含 `sessionToken` 的 `PAGE_FOCUS` 信号通知画布“正在浏览网页”，顶部 URL 条高亮「浏览中」；点击父页面任意区域即回收 DOM 焦点并恢复画布快捷键；URL 条复制按钮只复制原始项目地址，不带 `__vibe_host`。
 
 ## 11. 约定
 

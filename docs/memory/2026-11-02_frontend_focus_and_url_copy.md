@@ -58,7 +58,7 @@
 ## 验证
 
 ```bash
-node --check vibe-plugin/src/sdk.js
+node --check vite-plugin-vibe/src/sdk.js
 cd canvas-ui
 npm run build
 npm run lint

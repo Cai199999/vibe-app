@@ -14,11 +14,44 @@ Vibe Canvas 的开发期 Vite 插件。它只影响 `vite dev`：
 3. 在内存中维护源码片段注册表，并通过 `/__vibe/snippets` 提供给 SDK；
 4. 生产构建不注入任何属性、片段或 SDK。
 
-## 接入用户项目
+## 构建与分发
 
 ```bash
-# 本地联调示意；正式使用可发布到私有 npm
-npm install -D file:/home/admin1/Workspace/vibe-app/vibe-plugin
+cd vite-plugin-vibe
+npm install
+npm run build      # 输出 dist/index.js + dist/sdk.js
+npm pack           # 生成 vibe-vite-plugin-0.1.0.tgz
+```
+
+- `package.json` 的 `main` / `module` / `exports` 均指向 `dist/index.js`；
+- `sdk.js` 必须与 `index.js` 同目录，运行时通过 `import.meta.url` 读取；
+- `prepare` 会在安装或打包前自动构建；
+- `dist/` 是构建产物，不提交到 Git。
+
+## 接入用户项目
+
+方式一：打包后安装（推荐用于跨项目验证）
+
+```bash
+npm install -D /absolute/path/to/vite-plugin-vibe/vibe-vite-plugin-0.1.0.tgz
+```
+
+方式二：`npm link`
+
+```bash
+cd vite-plugin-vibe
+npm install
+npm run build
+npm link
+
+cd /path/to/your-vite-react-app
+npm link @vibe/vite-plugin
+```
+
+方式三：直接引用本地目录
+
+```bash
+npm install -D file:/absolute/path/to/vite-plugin-vibe
 ```
 
 ```js

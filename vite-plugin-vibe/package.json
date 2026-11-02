@@ -3,12 +3,29 @@
   "version": "0.1.0",
   "description": "Inject data-source metadata and the Vibe Canvas preview SDK into a Vite + React dev server.",
   "type": "module",
-  "private": true,
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
   "exports": {
-    ".": "./src/index.js"
+    ".": {
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
   },
   "files": [
-    "src"
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "vite",
+    "vite-plugin",
+    "react",
+    "vibe-coding",
+    "visual-editing"
   ],
   "engines": {
     "node": ">=20.19"

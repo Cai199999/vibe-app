@@ -12,7 +12,7 @@
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
-    "@vibe/vite-plugin": "file:../../vibe-plugin",
+    "@vibe/vite-plugin": "file:../../vite-plugin-vibe",
     "@vitejs/plugin-react": "^6.1.2",
     "vite": "^8.3.5"
   }
