@@ -142,6 +142,8 @@ export interface ScreenshotAsset {
   height: number
   /** PNG 解码后的实际字节数。 */
   bytes: number
+  /** 用户原始文件字节数；大图合成时改用 JPEG 0.8 压缩。 */
+  sourceBytes: number
   name: string
 }
 

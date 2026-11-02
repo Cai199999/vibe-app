@@ -271,7 +271,10 @@ def test_deepseek_image_route_uses_vision_model_and_red_prompt() -> None:
     payload = captured["payload"]
     assert payload["model"] == "deepseek-flash"
     assert result.model == "deepseek-flash"
-    assert "红色手绘轨迹" in payload["messages"][0]["content"]
+    vision_system = payload["messages"][0]["content"]
+    assert "红色手绘轨迹" in vision_system
+    assert "这是一个基于视觉标注的修改需求" in vision_system
+    assert "结合原有框架进行样式或组件的重构" in vision_system
     user_content = payload["messages"][1]["content"]
     assert isinstance(user_content, list)
     assert any(

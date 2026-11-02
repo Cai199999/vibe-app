@@ -14,7 +14,7 @@
 - `canvas-ui/src/lib/screenshot.ts`
   - 截图读取、最长边 1600 px 压缩、≤1 MB PNG 归一化。
   - `screenshotViewportRect` 与截图层、Canvas 合成共用同一 `object-contain` 显示矩形，避免坐标漂移。
-  - `composeScreenshotWithDrawings`：绘制原图、叠加 `#ef4444` 圆头粗线、按需缩小后导出 PNG data URL。
+  - `composeScreenshotWithDrawings`：绘制原图、叠加 `#ef4444` 圆头粗线、按需裁剪/缩小后导出 PNG 或 JPEG data URL。
 - `canvas-ui/src/hooks/useScreenshot.ts`
   - 上传、粘贴（仅拦截图片剪贴板）、加载状态、切换项目 / 退出视觉模式时清空。
 - `canvas-ui/src/components/canvas/ScreenshotLayer.tsx`
@@ -54,6 +54,39 @@
   - 合成图红色像素 8661，原图 0，证明红笔轨迹已叠加；
   - 粘贴图片可替换当前截图。
 
+## 视觉性能优化（2026-11-02 追加）
+
+### 自动裁剪与聚焦
+
+- `screenshotCropRect`：把所有 `visual-draw` 的 `visual.bbox` 求并集（画布世界坐标），
+  经 `screenshotViewportRect` 映射到截图像素坐标，叠加红笔线宽边距，再向四周各扩 20%，
+  最后夹在 `[0, width] × [0, height]` 内。
+- 有红圈时只合成并提交裁剪区域；没有红圈时提交完整截图。多个圈画合并为一个包围盒，
+  避免一次请求产生多张图片。
+- 绘制红笔时按裁剪区域重新映射所有点位，保证轨迹与裁剪图对齐；裁剪框太小（<2 px）时回退全图。
+
+### 前端压缩与 1 MB 兜底
+
+- `ScreenshotAsset` 新增 `sourceBytes`，记录用户原始文件大小。
+- 原图 > 2 MB：合成时直接使用 JPEG 质量 0.8，并先铺白底避免透明区域变黑。
+- 普通图片：先尝试 PNG；超过 1 MB 转 JPEG 0.8；仍超限则按 0.85 比例逐级缩小，
+  最多 20 次，质量最低 0.5，直到 Base64 解码后 ≤ 1 MB。
+- 上传阶段仍把最长边压到 1600 px 并保证归一化 PNG ≤ 1 MB；后端 1 MB 硬校验保持不变。
+
+### 视觉 Prompt 强化
+
+- `_VISION_SYSTEM_PROMPT` 第 10 条新增：明确要求模型告诉接收方（如 Cursor），
+  这是基于视觉标注的修改需求，需结合原有框架进行样式或组件的重构。
+
+### 浏览器 E2E 结果（fetch 拦截，不调用真实 API）
+
+- 1600×914 截图 + 搜索框红圈：提交图为 **656×107**，PNG 12,822 B；红色像素 8,661，
+  左右/下侧均保留外扩边距（上侧因搜索框贴近图片顶边被边界夹住）。
+- 清空标注后：提交完整 **1600×914** 截图，PNG 47,687 B。
+- 4,075,901 B 的 2200×1200 原图：归一化后经 JPEG 0.8 合成，最终 **723×395、162,705 B**，
+  MIME 为 `image/jpeg`，满足 ≤ 1 MB。
+- 后端 `pytest`：38 passed；前端 `npm run build` / `npm run lint` 通过。
+
 ## 真实 DeepSeek 验证
 
 配置真实 `DEEPSEEK_API_KEY` 并重启后，直接以 `/tmp/vibe-composite.png`（Northwind 页面 +
@@ -71,3 +104,7 @@
 - Firefox 合成 `ClipboardEvent` 会丢弃 `clipboardData`，E2E 通过 `Object.defineProperty`
   模拟真实粘贴事件；真实 `Ctrl/Cmd+V` 仍需在目标浏览器人工确认。
 - 截图只存在内存，刷新页面即丢失；不做自动截屏、不落盘、不上传对象存储。
+- 多个相距很远的红圈会合并成一个大包围盒，节省 Token 的效果下降；当前不做多图拆分。
+- 红圈贴近截图边缘时，20% 外扩会被图片边界夹住，这是预期行为。
+- 裁剪依赖前端合成坐标，若截图与画布显示比例不一致，仍需以 `screenshotViewportRect`
+  为唯一映射来源，不能另写缩放逻辑。

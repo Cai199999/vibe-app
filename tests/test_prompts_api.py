@@ -14,12 +14,26 @@ from __future__ import annotations
 import base64
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.config import Settings, get_settings
 from app.main import app
 
 client = TestClient(app)
+
+
+def _mock_settings() -> Settings:
+    """测试必须固定 Mock，不能读取本机 .env 中的真实 Provider / Key。"""
+    return Settings(prompt_provider="mock", deepseek_api_key="")
+
+
+@pytest.fixture(autouse=True)
+def _force_mock_provider() -> Any:
+    app.dependency_overrides[get_settings] = _mock_settings
+    yield
+    app.dependency_overrides.pop(get_settings, None)
+
 
 ORIGIN = "http://127.0.0.1:5174"
 SESSION = "st_test12345678"
@@ -210,7 +224,7 @@ def test_capabilities_declares_vision_model_for_deepseek() -> None:
     try:
         body = client.get("/api/v1/capabilities").json()
     finally:
-        app.dependency_overrides.pop(get_settings, None)
+        app.dependency_overrides[get_settings] = _mock_settings
 
     assert body["model"]["provider"] == "deepseek"
     assert body["model"]["visionModel"] == "deepseek-flash"
