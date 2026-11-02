@@ -65,7 +65,7 @@ npm run dev
 # http://127.0.0.1:5174
 ```
 
-打开画布 → 在中央「加载本地项目」输入 `http://127.0.0.1:5173` → 加载项目。
+打开画布 → 在中央「加载 Vite 项目」输入 `http://127.0.0.1:5173` → 加载项目。
 
 3 秒内完成 `HELLO` + `SNAPSHOT` 握手时，右上角显示绿色「已连接源码模式 · N 节点」，标题栏显示 `snapshot rN`；否则自动降级为黄色「仅视觉模式」。
 
@@ -143,7 +143,7 @@ VITE_PROMPT_API_BASE=http://127.0.0.1:8000
 |---|---|
 | `VITE_PROMPT_API_BASE` | L3 Prompt 服务地址；默认 `127.0.0.1:8000` |
 
-预览项目地址不再写死，也不再有 `VITE_PREVIEW_ORIGIN`。iframe 的 Origin 在用户点击「加载项目」时动态解析；只接受本机回环地址（`localhost` / `127.0.0.1` / `::1`），与后端校验保持一致。
+预览项目地址不再写死，也不再有 `VITE_PREVIEW_ORIGIN`。iframe 的 Origin 在用户点击「加载项目」时动态解析；默认只接受本机回环地址（`localhost` / `127.0.0.1` / `127.0.0.0/8` / `::1`），与后端校验保持一致。远程项目开关由根目录 `.env` 的 `ALLOW_REMOTE_PROJECTS` 控制，前端从 `/api/v1/capabilities` 读取，不另设 `VITE_*` 变量。
 
 后端 CORS 默认放行：
 
@@ -152,9 +152,38 @@ VITE_PROMPT_API_BASE=http://127.0.0.1:8000
 
 修改画布端口时，同步修改根目录 `.env` 的 `ALLOWED_ORIGINS` 并重启后端。
 
+### 远程项目加载（可选）
+
+默认关闭。需要加载局域网或远程的 Vite + React 项目时：
+
+1. 修改根目录 `.env`：
+
+   ```env
+   ALLOW_REMOTE_PROJECTS=true
+   ```
+
+2. 重启 FastAPI（配置在进程启动时读取），刷新画布；启动页会显示「远程项目加载：已开启」。
+3. 在目标项目启动 dev server，并监听可被浏览器访问的网卡：
+
+   ```bash
+   npm run dev -- --host 0.0.0.0 --port 5173
+   ```
+
+4. 在画布输入 `http://<目标机器IP>:5173`。非本机地址会显示红字安全警告。
+
+前提与限制：
+
+- 目标项目必须是 Vite + React，并已接入 `@vibe/vite-plugin`；Vue / Svelte 暂不支持。
+- 目标页面不能设置阻止 iframe 的 `X-Frame-Options` 或 CSP `frame-ancestors`。
+- 画布为 HTTPS 时，HTTP 项目会被浏览器混合内容策略拦截；两端需同为 HTTPS，或继续在本机使用。
+- 以下基础设施 / 管理端口在所有模式下都会被拦截：
+  `22 / 2375 / 2376 / 3306 / 5432 / 5672 / 6379 / 8000 / 9000 / 9001 / 9200 / 11211 / 15672 / 27017`。
+- 只加载可信项目：远程页面的 DOM 元数据、文本与 JSX 片段会进入 Prompt 并发送给模型。
+- 如果画布本身也通过其他机器访问，需要把画布 Origin 加入 `ALLOWED_ORIGINS`，并让 FastAPI 监听非回环地址。
+
 ## 使用流程
 
-1. 加载本地项目，等待 3 秒探测结果：
+1. 加载 Vite + React 项目，等待 3 秒探测结果：
    - 「已连接源码模式」：继续结构化标注；
    - 「仅视觉模式」：先上传 / 粘贴截图，再圈画；
 2. 源码模式下选择旁注 / 圈画 / 拖拽，在真实页面上做标注；仅视觉模式在截图上圈画；
@@ -169,7 +198,8 @@ canvas-ui/
 ├── src/
 │   ├── api/
 │   │   ├── promptApi.ts         # L3 fetch 客户端、错误归一化
-│   │   └── promptPayload.ts     # 画布标注 → API DTO（动态项目 Origin）
+│   │   ├── promptPayload.ts     # 画布标注 → API DTO（动态项目 Origin）
+│   │   └── systemApi.ts         # /capabilities 能力开关（远程项目策略）
 │   ├── components/
 │   │   ├── canvas/              # 画布、真实 iframe、截图层、项目加载、浮层、标注
 │   │   ├── panel/               # 可折叠工作台、标注列表、Markdown 结果
@@ -211,6 +241,7 @@ canvas-ui/
 - Prompt 只渲染 Markdown；不渲染原始 HTML、远程图片，链接只允许 `http(s)` / 锚点 / 站内路径。
 - 真实 `.env` 不入库；前端日志不打印标注正文或 Prompt 内容。
 - SDK 仅在 dev server 注入，生产构建不包含 `data-source`、片段注册表或 SDK。
+- 远程项目默认关闭；开启后只允许 http(s) + 合法 Host，危险端口始终拦截。远程页面的 DOM 数据与源码片段会发送给模型，UI 会显示红色警告，请只加载可信项目。
 
 ## 验证
 
@@ -247,6 +278,9 @@ cd ../..
 - [x] > 2 MB 原图合成时自动切换 JPEG 0.8，最终 Base64 解码后 ≤ 1 MB；
 - [x] 合成图红笔轨迹与画布位置一致；
 - [x] 无截图时生成被前端阻断并提示上传；
+- [x] `ALLOW_REMOTE_PROJECTS=false` 时远程地址被阻断并提示开关配置；
+- [x] 开关开启后远程地址显示指定红字警告，危险端口 / 非法 Host / 带凭据地址仍被拦截；
+- [x] 远程地址通过校验后可进入 iframe 加载流程；
 - [x] `npm run build` / `npm run lint` 通过。
 
 > 复制按钮调用 `navigator.clipboard`（降级到 `execCommand`）；部分浏览器需要用户授权或在安全上下文中使用，请在目标浏览器中手动确认一次。

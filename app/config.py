@@ -47,6 +47,8 @@ class Settings(BaseSettings):
     # ---- Prompt 服务 ----
     # mock: 本地固定 Markdown；deepseek: 调用真实 API
     prompt_provider: str = "mock"
+    # 默认只允许 localhost / 127.0.0.1 / ::1；开启后允许任意合法 http(s) 主机。
+    allow_remote_projects: bool = False
     allowed_origins: str = "http://127.0.0.1:5174,http://localhost:5174"
 
     # ---- DeepSeek（OpenAI 兼容接口） ----

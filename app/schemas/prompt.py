@@ -14,7 +14,6 @@ import binascii
 import re
 from datetime import datetime, timezone
 from typing import Any, Literal
-from urllib.parse import urlparse
 
 from pydantic import (
     AliasChoices,
@@ -26,6 +25,8 @@ from pydantic import (
 )
 from pydantic.alias_generators import to_camel
 from pydantic_core import PydanticCustomError
+
+from app.core.preview_origin import PreviewOriginError, normalize_preview_origin
 
 # 与文档默认值一致；服务端还会用 Settings 再做一次更严格的校验。
 MAX_TEXT_LENGTH = 200
@@ -44,8 +45,6 @@ SOURCE_PATTERN = re.compile(
 ANNOTATION_ID_PATTERN = re.compile(r"^ann_[A-Za-z0-9_-]{1,64}$")
 REQUEST_ID_PATTERN = re.compile(r"^req_[A-Za-z0-9_-]{1,64}$")
 PROTOCOL_MAJOR = "0"
-
-LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 # 顶层视觉截图字段：允许前端直接使用 data URL，服务端只接受 base64 图片。
 IMAGE_DATA_URL_PATTERN = re.compile(
@@ -105,13 +104,11 @@ class ProjectInfo(CamelModel):
     @field_validator("preview_origin")
     @classmethod
     def _validate_preview_origin(cls, value: str) -> str:
-        """MVP 只允许回环地址，避免把接口误用到公网页面。"""
-        parsed = urlparse(value)
-        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
-            raise ValueError("previewOrigin 必须是合法的 http(s) URL")
-        if parsed.hostname not in LOCAL_HOSTS:
-            raise ValueError("previewOrigin 必须是本机回环地址")
-        return value.rstrip("/")
+        """只做语法校验；远程开关与危险端口由 PromptService 按配置执行。"""
+        try:
+            return normalize_preview_origin(value)
+        except PreviewOriginError as exc:
+            raise ValueError(str(exc)) from exc
 
 
 class TruncatedFlags(CamelModel):

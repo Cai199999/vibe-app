@@ -78,5 +78,7 @@ def capabilities(
             # 仅视觉标注（visual-draw）必须在顶层 image_base64 存在时使用。
             "visualOnlyAnnotations": True,
             "snapshotFiltersDisplayNone": True,
+            # 远程项目开关由根目录 .env 控制，前端据此显示安全警告。
+            "allowRemoteProjects": settings.allow_remote_projects,
         },
     }

@@ -72,12 +72,12 @@ function App() {
     clear()
     clearScreenshot()
     resetPrompt()
-    show('已卸载当前项目，可重新输入本地地址。', 'info')
+    show('已卸载当前项目，可重新输入项目地址。', 'info')
   }, [clear, clearScreenshot, resetPrompt, show])
 
   const handleGenerate = useCallback(async () => {
     if (!project) {
-      show('请先加载本地项目。', 'info')
+      show('请先加载项目。', 'info')
       return
     }
 

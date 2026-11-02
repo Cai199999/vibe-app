@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 
+import { fetchCapabilities } from '../../api/systemApi'
 import {
   getLastProjectUrl,
+  isRemoteProjectAddress,
   parseProjectUrl,
   rememberProjectUrl,
 } from '../../lib/project'
@@ -13,16 +15,51 @@ interface ProjectLauncherProps {
   onLoad: (project: LocalProject) => void
 }
 
+type RemotePolicy =
+  | { status: 'loading' }
+  | { status: 'ready'; allowed: boolean }
+  | { status: 'error' }
+
 const DEFAULT_URL = 'http://localhost:5173'
 
 export function ProjectLauncher({ onLoad }: ProjectLauncherProps) {
   const [value, setValue] = useState(() => getLastProjectUrl() || DEFAULT_URL)
   const [error, setError] = useState<string | null>(null)
+  const [remotePolicy, setRemotePolicy] = useState<RemotePolicy>({
+    status: 'loading',
+  })
+  const [policyReloadKey, setPolicyReloadKey] = useState(0)
+
+  // 远程开关以 FastAPI 能力声明为唯一来源，避免前端另写一份环境变量。
+  useEffect(() => {
+    let cancelled = false
+    void fetchCapabilities()
+      .then((capabilities) => {
+        if (cancelled) return
+        setRemotePolicy({
+          status: 'ready',
+          allowed: capabilities.features.allowRemoteProjects === true,
+        })
+      })
+      .catch(() => {
+        if (!cancelled) setRemotePolicy({ status: 'error' })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [policyReloadKey])
+
+  const allowRemoteProjects =
+    remotePolicy.status === 'ready' ? remotePolicy.allowed : null
+  const showRemoteWarning =
+    remotePolicy.status === 'ready' &&
+    remotePolicy.allowed &&
+    isRemoteProjectAddress(value)
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     try {
-      const project = parseProjectUrl(value)
+      const project = parseProjectUrl(value, { allowRemoteProjects })
       rememberProjectUrl(project.url)
       setError(null)
       onLoad(project)
@@ -41,14 +78,18 @@ export function ProjectLauncher({ onLoad }: ProjectLauncherProps) {
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h1 className="text-[16px] font-semibold tracking-tight text-white">
-                加载本地项目
+                加载 Vite 项目
               </h1>
               <span className="rounded-full border border-indigo-400/20 bg-indigo-400/[0.08] px-2 py-0.5 font-mono text-[8px] text-indigo-200">
-                REAL PREVIEW
+                VITE + REACT
               </span>
             </div>
             <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500">
-              输入正在运行的 Vite 地址。画布通过 iframe 加载它，
+              仅支持已接入{' '}
+              <code className="font-mono text-slate-400">
+                @vibe/vite-plugin
+              </code>{' '}
+              的 Vite + React 项目。画布通过 iframe 加载，
               <span className="text-slate-400">
                 无需手动导入任何 HTML 文件
               </span>
@@ -92,8 +133,19 @@ export function ProjectLauncher({ onLoad }: ProjectLauncherProps) {
               加载项目
             </button>
           </div>
+          {showRemoteWarning && (
+            <p
+              data-testid="remote-project-warning"
+              className="mt-2 text-[10px] leading-relaxed text-rose-300"
+            >
+              ⚠️ 请仅加载你信任的项目地址，远程页面会将 DOM 数据与源码片段发送给模型。
+            </p>
+          )}
           {error && (
-            <p className="mt-2 flex items-center gap-1.5 text-[10px] text-rose-300">
+            <p
+              data-testid="project-url-error"
+              className="mt-2 flex items-center gap-1.5 text-[10px] text-rose-300"
+            >
               <Icon name="alert" size={11} />
               {error}
             </p>
@@ -108,7 +160,7 @@ export function ProjectLauncher({ onLoad }: ProjectLauncherProps) {
           <ol className="mt-2 space-y-1.5 text-[10px] leading-relaxed text-slate-500">
             <li>
               <span className="mr-1.5 font-mono text-indigo-300/80">01</span>
-              Vite dev server 正在运行（例如{' '}
+              项目为 Vite + React，dev server 正在运行（例如{' '}
               <code className="font-mono text-slate-400">localhost:5173</code>）。
             </li>
             <li>
@@ -131,6 +183,38 @@ export function ProjectLauncher({ onLoad }: ProjectLauncherProps) {
         <p className="mt-3 text-[9px] leading-relaxed text-slate-600">
           使用 localhost 与 127.0.0.1 时保持地址一致；两者是不同的 Origin。
         </p>
+        <div
+          data-testid="remote-project-policy"
+          className="mt-1.5 flex items-center gap-1.5 text-[9px] leading-relaxed"
+        >
+          <span className="text-slate-600">远程项目加载：</span>
+          {remotePolicy.status === 'loading' && (
+            <span className="text-slate-500">读取服务端开关…</span>
+          )}
+          {remotePolicy.status === 'ready' && remotePolicy.allowed && (
+            <span className="text-emerald-400/90">
+              已开启（ALLOW_REMOTE_PROJECTS=true）
+            </span>
+          )}
+          {remotePolicy.status === 'ready' && !remotePolicy.allowed && (
+            <span className="text-slate-500">已关闭（默认仅本机）</span>
+          )}
+          {remotePolicy.status === 'error' && (
+            <>
+              <span className="text-rose-300/90">读取失败</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setRemotePolicy({ status: 'loading' })
+                  setPolicyReloadKey((key) => key + 1)
+                }}
+                className="text-indigo-300 underline-offset-2 hover:underline"
+              >
+                重试
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   )

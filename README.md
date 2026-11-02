@@ -26,6 +26,10 @@ cp .env.example .env   # 按需修改连接串与密钥
 
 中间件复用 `~/Workspace/infra` 下常驻的 Docker 实例，无需重复部署。
 
+画布默认只允许加载本机 Vite 项目。需要加载局域网 / 远程项目时，在根目录 `.env` 设置
+`ALLOW_REMOTE_PROJECTS=true` 并重启 FastAPI；仅支持 Vite + React，危险端口始终拦截。
+详见 [`canvas-ui/README.md`](canvas-ui/README.md#远程项目加载可选)。
+
 ## 测试与格式化
 
 ```bash

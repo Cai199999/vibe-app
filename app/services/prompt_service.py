@@ -14,6 +14,10 @@ from datetime import datetime, timezone
 
 from app.config import Settings
 from app.core.errors import ApiError
+from app.core.preview_origin import (
+    PreviewOriginError,
+    ensure_preview_origin_allowed,
+)
 from app.schemas.prompt import (
     Annotation,
     ModelInfo,
@@ -121,6 +125,19 @@ class PromptService:
 
     def _validate_limits(self, request: PromptGenerateRequest) -> None:
         """在调用模型前做服务端硬校验，避免把无效请求发给上游。"""
+        # 项目地址策略：默认仅回环地址；危险端口始终拒绝。
+        try:
+            ensure_preview_origin_allowed(
+                request.project.preview_origin,
+                allow_remote=self.settings.allow_remote_projects,
+            )
+        except PreviewOriginError as exc:
+            raise ApiError(
+                400,
+                "VALIDATION_FAILED",
+                str(exc),
+            ) from exc
+
         if len(request.annotations) > self.settings.max_annotations_per_request:
             raise ApiError(
                 413,

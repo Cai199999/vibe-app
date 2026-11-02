@@ -122,7 +122,7 @@ export interface SnippetResult {
 
 export type BridgeStatus = 'idle' | 'connecting' | 'connected' | 'visual'
 
-/** 当前加载到画布中的本地项目。 */
+/** 当前加载到画布中的 Vite + React 项目。 */
 export interface LocalProject {
   /** 每次加载生成新的 id，用于强制重建 iframe 并重置桥接状态。 */
   id: string

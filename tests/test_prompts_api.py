@@ -212,6 +212,22 @@ def test_capabilities_declares_limits_and_features() -> None:
     assert features["imageInput"] is True
     assert features["visualOnlyAnnotations"] is True
     assert features["snapshotFiltersDisplayNone"] is True
+    assert features["allowRemoteProjects"] is False
+
+
+def test_capabilities_reports_remote_switch_enabled() -> None:
+    """ALLOW_REMOTE_PROJECTS=true 时，前端应能读取到开关状态。"""
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        prompt_provider="mock",
+        deepseek_api_key="",
+        allow_remote_projects=True,
+    )
+    try:
+        body = client.get("/api/v1/capabilities").json()
+    finally:
+        app.dependency_overrides[get_settings] = _mock_settings
+
+    assert body["features"]["allowRemoteProjects"] is True
 
 
 def test_capabilities_declares_vision_model_for_deepseek() -> None:
@@ -329,6 +345,80 @@ def test_invalid_image_base64_is_rejected() -> None:
     payload["image_base64"] = "data:image/png;base64,not-valid-***"
 
     resp = _post(payload, _headers())
+
+    assert resp.status_code == 400, resp.text
+    assert resp.json()["error"]["code"] == "VALIDATION_FAILED"
+
+
+# ---------------------------------------------------------------- 项目地址策略
+
+
+def _remote_payload(origin: str = "http://192.168.1.50:5173") -> dict[str, Any]:
+    payload = _payload()
+    payload["project"]["previewOrigin"] = origin
+    return payload
+
+
+def test_remote_preview_origin_rejected_when_disabled() -> None:
+    resp = _post(_remote_payload(), _headers())
+
+    assert resp.status_code == 400, resp.text
+    error = resp.json()["error"]
+    assert error["code"] == "VALIDATION_FAILED"
+    assert "ALLOW_REMOTE_PROJECTS" in error["message"]
+
+
+def test_remote_preview_origin_allowed_when_enabled() -> None:
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        prompt_provider="mock",
+        deepseek_api_key="",
+        allow_remote_projects=True,
+    )
+    try:
+        resp = _post(_remote_payload(), _headers())
+    finally:
+        app.dependency_overrides[get_settings] = _mock_settings
+
+    assert resp.status_code == 200, resp.text
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "http://192.168.1.50:3306",
+        "https://example.com:9001",
+        "http://127.0.0.1:6379",
+    ],
+)
+def test_blocked_preview_ports_rejected_even_when_remote_enabled(
+    origin: str,
+) -> None:
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        prompt_provider="mock",
+        deepseek_api_key="",
+        allow_remote_projects=True,
+    )
+    try:
+        resp = _post(_remote_payload(origin), _headers())
+    finally:
+        app.dependency_overrides[get_settings] = _mock_settings
+
+    assert resp.status_code == 400, resp.text
+    assert "端口" in resp.json()["error"]["message"]
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "http://user:pass@192.168.1.50:5173",
+        "http://bad host:5173",
+        "http://-bad-.example.com:5173",
+        "http://example.com:5173/app",
+        "ftp://example.com:5173",
+    ],
+)
+def test_invalid_preview_origin_format_is_rejected(origin: str) -> None:
+    resp = _post(_remote_payload(origin), _headers())
 
     assert resp.status_code == 400, resp.text
     assert resp.json()["error"]["code"] == "VALIDATION_FAILED"

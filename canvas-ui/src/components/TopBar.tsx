@@ -196,7 +196,7 @@ export function TopBar({
               : bridgeStatus === 'visual'
                 ? '未检测到源码插件：上传截图并圈画后可用视觉模型生成'
                 : bridgeStatus === 'idle'
-                  ? '尚未加载本地项目'
+                  ? '尚未加载项目'
                   : '正在探测项目内的 Vibe SDK（3 秒）'
           }
         >
