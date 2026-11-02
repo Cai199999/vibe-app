@@ -1,0 +1,89 @@
+# 🎨 Vibe Canvas
+
+[![npm version](https://badge.fury.io/js/vite-plugin-vibe.svg)](https://www.npmjs.com/package/vite-plugin-vibe)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+
+> **赋予 Cursor 眼睛与画笔，让 Vibe Coding 真正“所见即所得”。**
+
+Vibe Canvas 是一个基于**视觉标注与源码 AST 注入**的本地优先 AI 辅助外挂。它打破了传统“纯文字 Prompt”带来的空间描述障碍，让你能够以“画圈、旁注、拖拽”的直观方式与 AI 协作，将可视化意图精准转化为大模型可理解的修改指令。
+
+---
+
+## 💡 为什么需要 Vibe Canvas？
+
+在使用 Cursor 或 Claude Code 时，我们常常面临两个痛点：
+1. **语言描述极度低效**：“那个在左边的、稍微宽一点、要蓝色的按钮”，这种模糊描述会导致 AI 反复猜错。
+2. **改代码像拆盲盒**：直接让 AI 自动修改整个文件，容易引发连锁崩溃。
+
+**Vibe Canvas 的解法是：** 只做最聪明的“可视化意图转译器”。你在画布上指哪打哪，系统生成一段**包含精准文件路径、源码行号、甚至带有红圈视觉理解的** Markdown 指令。你一键复制，丢给外部 IDE 就能秒出完美代码。
+
+---
+
+## ✨ 核心特性
+
+- 🎯 **源码级精准映射（绿灯模式）**：通过自研 Vite 插件在编译期注入 `data-source`（文件与行号），让 AI 精确知道你要改哪个组件的哪一行。
+- 🖍️ **多模态红圈合图（黄灯模式）**：无需安装插件。自动将网页截图与用户的画笔轨迹合成，智能裁剪红圈包围盒，让视觉大模型一眼看懂重点。
+- 🔒 **企业级隐私保护**：内置敏感信息脱敏中间件（自动拦截 API Key、手机号、JWT 等），并完美支持接入本地 Ollama 模型，实现断网零泄露。
+- 🚀 **零配置一键启动**：纯本地运行，无需登录、无云端数据库，内置极简的一键启停脚本。
+- 🔄 **双模式智能探测**：自动识别目标网页是否安装了插件，3 秒内无响应则自动降级为“仅视觉模式”，支持加载任意远程或局域网 URL。
+
+---
+
+## 🚀 快速开始
+
+### 1. 启动 Vibe Canvas 主体
+```bash
+# 克隆仓库
+git clone <your-repo-url> vibe-canvas
+cd vibe-canvas
+
+# 配置环境变量 (可配置云端 DeepSeek Key 或本地 Ollama)
+cp .env.example .env
+
+# 一键启动前后端
+./scripts/dev.sh启动后，打开浏览器访问：http://127.0.0.1:5174
+2. 在你的项目中安装 Vite 插件（可选，用于源码模式）
+
+在你的 Vite + React 项目中：
+bash
+
+npm i -D vite-plugin-vibe
+
+在 vite.config.js 中引入：
+javascript
+
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import vibe from 'vite-plugin-vibe'
+
+export default defineConfig({
+  plugins: [react(), vibe()]
+})
+
+启动你的项目（注意加上 --host 允许局域网访问）：
+bash
+
+npm run dev -- --host 0.0.0.0
+
+在 Vibe Canvas 中输入你的本地 URL（如 http://127.0.0.1:5173），右上角亮起绿灯，即可开启源码级标注！
+🛠 标准工作流
+
+    进入画布：选择加载本地 URL（源码模式），或直接上传/粘贴截图（视觉模式）。
+
+    空间标注：按 P 画红圈，按 N 添加旁注，按 D 拖拽元素。
+
+    生成指令：点击右侧“生成指令”，大模型会结合你的操作，生成一段结构化的 Markdown 修改方案。
+
+    外部执行：一键复制该指令，粘贴到 Cursor / Windsurf 等 AI IDE 中，让 AI 完成最后一步的代码落地。
+
+🔒 安全与边界
+
+    不直接修改代码：本工具仅生成 Prompt，不介入用户的构建流程、不直接修改文件，所有代码改动由外部 IDE Agent 完成。
+
+    远程加载警告：加载远程 URL 时，DOM 元数据与源码片段会发送给云端大模型。请仅加载信任地址。如需物理隔离，请在 .env 中切换至 Ollama 本地模型。
+
+    编译期限制：不支持 node_modules 中的第三方组件注入，无法获取动态注入的 DOM 结构。
+
+📄 开源协议
+
+本项目采用 MIT License 开源。
