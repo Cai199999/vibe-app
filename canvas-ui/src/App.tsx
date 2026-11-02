@@ -11,6 +11,7 @@ import { useIframeBridge } from './hooks/useIframeBridge'
 import { usePromptGeneration } from './hooks/usePromptGeneration'
 import { useScreenshot } from './hooks/useScreenshot'
 import { useToast } from './hooks/useToast'
+import { copyText } from './lib/clipboard'
 import { composeScreenshotWithDrawings } from './lib/screenshot'
 import { VISUAL_REQUIRE_SCREENSHOT_MESSAGE } from './lib/messages'
 import type { LocalProject, Mode } from './types/vibe'
@@ -112,6 +113,19 @@ function App() {
     [visualMode],
   )
 
+  const handleCopyProjectUrl = useCallback(async () => {
+    if (!project?.url) return
+    try {
+      await copyText(project.url)
+      show('URL 已复制', 'success')
+    } catch (error) {
+      show(
+        error instanceof Error ? error.message : '复制失败，请手动复制 URL。',
+        'error',
+      )
+    }
+  }, [project, show])
+
   const handleGenerate = useCallback(async () => {
     const activeProject =
       project ?? (workspace === 'visual' ? SCREENSHOT_PROJECT : null)
@@ -197,8 +211,10 @@ function App() {
         onUndo={undo}
         bridgeStatus={bridge.status}
         bridgeError={bridge.lastError}
-        previewOrigin={project?.origin ?? null}
+        projectUrl={project?.url ?? null}
         projectName={projectName}
+        iframeFocused={bridge.iframeFocused}
+        onCopyUrl={() => void handleCopyProjectUrl()}
         elementCount={bridge.snapshot ? elementCount : null}
         screenshot={screenshot}
         screenshotLoading={screenshotLoading}
@@ -221,6 +237,8 @@ function App() {
           onAdd={add}
           onSelect={select}
           onUndo={undo}
+          iframeFocused={bridge.iframeFocused}
+          onExitIframeFocus={bridge.releaseIframeFocus}
           showToast={show}
         />
 

@@ -59,8 +59,12 @@ interface TopBarProps {
   onUndo: () => void
   bridgeStatus: BridgeStatus
   bridgeError: string | null
-  previewOrigin: string | null
+  /** 仅源码项目存在；视觉截图工作区为 null。 */
+  projectUrl: string | null
   projectName: string | null
+  /** 最近一次指针落点是否在真实 iframe 页面内。 */
+  iframeFocused: boolean
+  onCopyUrl: () => void
   /** null 表示握手成功但快照尚未到达。 */
   elementCount: number | null
   screenshot: ScreenshotAsset | null
@@ -78,8 +82,10 @@ export function TopBar({
   onUndo,
   bridgeStatus,
   bridgeError,
-  previewOrigin,
+  projectUrl,
   projectName,
+  iframeFocused,
+  onCopyUrl,
   elementCount,
   screenshot,
   screenshotLoading,
@@ -93,6 +99,7 @@ export function TopBar({
   const modes = visualMode
     ? MODES.filter((option) => VISUAL_MODES.has(option.mode))
     : MODES
+  const displayUrl = projectUrl?.replace(/^https?:\/\//, '') ?? ''
 
   const statusTitle =
     bridgeStatus === 'connected'
@@ -106,25 +113,69 @@ export function TopBar({
           : '正在探测项目内的 Vibe SDK（3 秒）'
 
   return (
-    <header className="relative z-40 flex h-[60px] shrink-0 items-center gap-3 border-b border-white/[0.08] bg-[#0c0f15] px-3">
-      <div className="flex w-[230px] min-w-0 shrink-0 items-center gap-2.5">
+    <header className="relative z-40 flex h-[60px] shrink-0 items-center gap-2 border-b border-white/[0.08] bg-[#0c0f15] px-3">
+      <div className="flex shrink-0 items-center gap-2.5">
         <div className="logo-mark">
           <Icon name="sparkles" size={16} />
         </div>
-        <div className="min-w-0">
+        <div className="hidden min-w-0 sm:block">
           <div className="truncate text-[13px] font-semibold tracking-tight text-white">
             Vibe Canvas
           </div>
         </div>
-        {previewOrigin && (
-          <div className="ml-1 hidden min-w-0 items-center gap-1.5 rounded-lg bg-white/[0.04] px-2 py-1 ring-1 ring-white/[0.08] 2xl:flex">
-            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${status.dot}`} />
-            <span className="truncate font-mono text-[9px] text-slate-400">
-              {previewOrigin.replace(/^https?:\/\//, '')}
-            </span>
-          </div>
-        )}
       </div>
+
+      {projectUrl && (
+        <div
+          data-testid="project-url-bar"
+          data-focused={iframeFocused}
+          aria-label={
+            iframeFocused
+              ? `正在浏览项目 ${projectUrl}`
+              : `当前项目 URL ${projectUrl}`
+          }
+          title={
+            iframeFocused
+              ? '当前正在浏览项目网页；点击画布空白处返回工具模式'
+              : '当前项目 URL；按 V 进入交互模式后点击网页即可浏览'
+          }
+          className={`hidden h-8 min-w-[170px] max-w-[320px] flex-1 items-center gap-2 rounded-lg border px-2.5 transition-all duration-200 xl:flex ${
+            iframeFocused
+              ? 'border-emerald-400/35 bg-emerald-400/[0.08] shadow-[0_0_0_1px_rgba(52,211,153,0.12),0_0_18px_-6px_rgba(52,211,153,0.35)]'
+              : 'border-white/[0.08] bg-white/[0.03]'
+          }`}
+        >
+          <Icon
+            name="link"
+            size={11}
+            className={`shrink-0 transition-colors ${
+              iframeFocused ? 'text-emerald-300' : 'text-slate-500'
+            }`}
+          />
+          <span
+            className={`truncate font-mono text-[9px] transition-colors ${
+              iframeFocused ? 'text-emerald-100/85' : 'text-slate-400'
+            }`}
+          >
+            {displayUrl}
+          </span>
+          {iframeFocused && (
+            <span className="shrink-0 rounded-full bg-emerald-400/15 px-1.5 py-0.5 font-mono text-[8px] font-medium text-emerald-300">
+              浏览中
+            </span>
+          )}
+          <button
+            type="button"
+            data-testid="copy-project-url"
+            onClick={onCopyUrl}
+            className="grid h-5 w-5 shrink-0 place-items-center rounded text-slate-500 transition hover:bg-white/10 hover:text-slate-200"
+            title="复制当前 URL"
+            aria-label="复制当前 URL"
+          >
+            <Icon name="copy" size={10} />
+          </button>
+        </div>
+      )}
 
       <div className="flex min-w-0 flex-1 justify-center">
         <div
@@ -204,7 +255,7 @@ export function TopBar({
         </div>
       </div>
 
-      <div className="flex w-[330px] shrink-0 items-center justify-end gap-1.5">
+      <div className="flex w-[300px] shrink-0 items-center justify-end gap-1.5">
         {visualMode && (
           <span
             data-testid="visual-privacy-warning"

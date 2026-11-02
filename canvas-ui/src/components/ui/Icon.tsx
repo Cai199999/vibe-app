@@ -26,6 +26,7 @@ export type IconName =
   | 'image'
   | 'home'
   | 'lock'
+  | 'link'
 
 const CONTENT: Record<IconName, ReactNode> = {
   sparkles: (
@@ -148,6 +149,12 @@ const CONTENT: Record<IconName, ReactNode> = {
     <>
       <rect x="4" y="10" width="16" height="11" rx="2" />
       <path d="M8 10V7a4 4 0 018 0v3" />
+    </>
+  ),
+  link: (
+    <>
+      <path d="M10 13.5a4.5 4.5 0 006.4.4l2-2a4.5 4.5 0 00-6.4-6.4l-1.1 1.1" />
+      <path d="M14 10.5a4.5 4.5 0 00-6.4-.4l-2 2a4.5 4.5 0 006.4 6.4l1.1-1.1" />
     </>
   ),
 }

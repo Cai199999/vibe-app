@@ -221,11 +221,12 @@ flowchart LR
 - [x] 阶段九：发送前敏感信息脱敏 `REDACT_SENSITIVE`、Ollama 本地 / 局域网模型接入 `LLM_PROVIDER=ollama`（2026-11-02）
 - [x] 阶段九加固：UUID / 哈希白名单、URL 凭据脱敏、Ollama JSX 截断与抗寒暄约束、异常日志安全、视觉隐私提示（2026-11-02）
 - [x] 阶段十：模式选择入口页（源码 / 截图）、视觉工作区跳过握手、退出切换与全界面文案减法（2026-11-02）
+- [x] 阶段十一：SDK `PAGE_FOCUS` 焦点信号、顶部 URL 浏览态高亮、外部点击回收焦点、复制 URL Toast（2026-11-02）
 - [x] 阶段四：真实 DeepSeek 多模态联调（`deepseek-flash` 识别红圈搜索框，2026-11-02）
 - [ ] 阶段四：更多页面类型的 Prompt 质量评估
 - [ ] 阶段四：`localStorage` 历史、失效标注重定位
 
-> 当前业务代码包含 `app/`（FastAPI L3）、`canvas-ui/`（React 画布）、`vibe-plugin/`（Vite 插件 + SDK）与 `examples/vite-demo/`（验证项目）。画布入口页可二选一：加载本地 Vite 项目，或直接进入截图工作区（跳过 3 秒握手）；源码项目加载后 3 秒内探测 SDK：成功为源码模式，失败自动降级为仅视觉模式；顶部主页图标可退出并重新选择；源码模式支持旁注/圈画/拖拽与 L3 联调；仅视觉模式需上传 / 粘贴截图，前端把截图与红色手绘轨迹合成后以 `image_base64` 提交：有红圈时只发送包围盒并集外扩 20% 的局部图，无红圈发送全图，大图自动使用 JPEG 0.8 并保证 ≤ 1 MB，后端切换到 `deepseek-flash`。项目加载默认仅限本机回环地址；根目录 `.env` 的 `ALLOW_REMOTE_PROJECTS=true` 可开启局域网 / 远程加载，前后端都会校验 http(s) Host 并拦截基础设施端口，当前仍只支持 Vite + React。发送模型前默认执行文本脱敏（`REDACT_SENSITIVE=true`），邮箱、手机号、AK/SK、Authorization、URL 内嵌密码、JWT 等替换为 `[REDACTED]`，UUID 与 MD5 / SHA1 摘要豁免，文件路径与图片 Base64 保留；模型可通过 `LLM_PROVIDER=deepseek|ollama` 切换，Ollama 支持本地 / 局域网地址，视觉模式需配置 `OLLAMA_VISION_MODEL`，超长 JSX 会按 `OLLAMA_MAX_SNIPPET_CHARS` 截断；视觉模式界面常驻提示截图像素内容无法脱敏。交互模式下的 iframe 内输入事件仍由用户页面接管，这是浏览器跨域 iframe 的固有限制。
+> 当前业务代码包含 `app/`（FastAPI L3）、`canvas-ui/`（React 画布）、`vibe-plugin/`（Vite 插件 + SDK）与 `examples/vite-demo/`（验证项目）。画布入口页可二选一：加载本地 Vite 项目，或直接进入截图工作区（跳过 3 秒握手）；源码项目加载后 3 秒内探测 SDK：成功为源码模式，失败自动降级为仅视觉模式；顶部主页图标可退出并重新选择；源码模式支持旁注/圈画/拖拽与 L3 联调；仅视觉模式需上传 / 粘贴截图，前端把截图与红色手绘轨迹合成后以 `image_base64` 提交：有红圈时只发送包围盒并集外扩 20% 的局部图，无红圈发送全图，大图自动使用 JPEG 0.8 并保证 ≤ 1 MB，后端切换到 `deepseek-flash`。项目加载默认仅限本机回环地址；根目录 `.env` 的 `ALLOW_REMOTE_PROJECTS=true` 可开启局域网 / 远程加载，前后端都会校验 http(s) Host 并拦截基础设施端口，当前仍只支持 Vite + React。发送模型前默认执行文本脱敏（`REDACT_SENSITIVE=true`），邮箱、手机号、AK/SK、Authorization、URL 内嵌密码、JWT 等替换为 `[REDACTED]`，UUID 与 MD5 / SHA1 摘要豁免，文件路径与图片 Base64 保留；模型可通过 `LLM_PROVIDER=deepseek|ollama` 切换，Ollama 支持本地 / 局域网地址，视觉模式需配置 `OLLAMA_VISION_MODEL`，超长 JSX 会按 `OLLAMA_MAX_SNIPPET_CHARS` 截断；视觉模式界面常驻提示截图像素内容无法脱敏。交互模式下的 iframe 内输入事件仍由用户页面接管，这是浏览器跨域 iframe 的固有限制；SDK 通过只含 `sessionToken` 的 `PAGE_FOCUS` 信号通知画布“正在浏览网页”，顶部 URL 条高亮「浏览中」；点击父页面任意区域即回收 DOM 焦点并恢复画布快捷键；URL 条复制按钮只复制原始项目地址，不带 `__vibe_host`。
 
 ## 11. 约定
 

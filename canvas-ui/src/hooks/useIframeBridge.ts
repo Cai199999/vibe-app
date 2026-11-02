@@ -44,6 +44,9 @@ export interface IframeBridge {
   sessionToken: string
   snapshot: VibeSnapshot | null
   lastError: string | null
+  /** true 表示最近一次指针落点在真实 iframe 页面内。 */
+  iframeFocused: boolean
+  releaseIframeFocus: () => void
   hitTest: (
     x: number,
     y: number,
@@ -114,6 +117,11 @@ export function useIframeBridge(
   )
   const [snapshot, setSnapshot] = useState<VibeSnapshot | null>(null)
   const [lastError, setLastError] = useState<string | null>(null)
+  const [iframeFocused, setIframeFocused] = useState(false)
+
+  const releaseIframeFocus = useCallback(() => {
+    setIframeFocused(false)
+  }, [])
 
   const postRaw = useCallback(
     (message: Record<string, unknown>): boolean => {
@@ -184,6 +192,9 @@ export function useIframeBridge(
     setSessionToken(nextToken)
     setSnapshot(null)
     setLastError(null)
+    // 新项目重新接管焦点，避免沿用旧页面的“浏览中”状态。
+    // eslint-disable-next-line react/set-state-in-effect
+    setIframeFocused(false)
 
     // 截图工作区没有 iframe：直接停在仅视觉模式，跳过 3 秒握手探测。
     if (forceVisual) {
@@ -207,6 +218,7 @@ export function useIframeBridge(
         '已切换为仅视觉模式，等待中的源码请求已取消',
       )
       setStatus('visual')
+      setIframeFocused(false)
       setLastError(VISUAL_FALLBACK_DETAIL)
     }, HANDSHAKE_TIMEOUT_MS)
 
@@ -239,6 +251,7 @@ export function useIframeBridge(
         readyRef.current = false
         clearHandshakeTimer()
         setStatus('visual')
+        setIframeFocused(false)
         setLastError('SDK 协议主版本不兼容，已切换为仅视觉模式；请升级 @vibe/vite-plugin。')
         return
       }
@@ -265,6 +278,14 @@ export function useIframeBridge(
 
       // WELCOME 之后的所有消息都必须带正确 token。
       if (data.sessionToken !== sessionRef.current) return
+
+      if (data.type === 'PAGE_FOCUS') {
+        // SDK 只在真实页面 pointerdown 后上报信号，不携带 DOM 内容。
+        if (!fallbackRef.current && readyRef.current) {
+          setIframeFocused(true)
+        }
+        return
+      }
 
       if (data.type === 'SNAPSHOT') {
         if (fallbackRef.current) return
@@ -319,6 +340,7 @@ export function useIframeBridge(
         fallbackRef.current = true
         clearHandshakeTimer()
         setStatus('visual')
+        setIframeFocused(false)
         setLastError(
           'iframe 心跳超时，已切换为仅视觉模式；请重新加载项目或检查 dev server。',
         )
@@ -393,6 +415,8 @@ export function useIframeBridge(
     sessionToken,
     snapshot,
     lastError,
+    iframeFocused,
+    releaseIframeFocus,
     hitTest,
     elementsInBox,
     sourceSnippet,

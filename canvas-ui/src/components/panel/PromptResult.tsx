@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm'
 
 import type { PromptResponse } from '../../types/vibe'
 import type { PromptErrorState } from '../../hooks/usePromptGeneration'
+import { copyText } from '../../lib/clipboard'
 import { Icon } from '../ui/Icon'
 
 const MARKDOWN_COMPONENTS: Components = {
@@ -29,23 +30,6 @@ const MARKDOWN_COMPONENTS: Components = {
       </span>
     )
   },
-}
-
-async function copyText(text: string): Promise<void> {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text)
-    return
-  }
-  const textarea = document.createElement('textarea')
-  textarea.value = text
-  textarea.setAttribute('readonly', '')
-  textarea.style.position = 'fixed'
-  textarea.style.opacity = '0'
-  document.body.appendChild(textarea)
-  textarea.select()
-  const ok = document.execCommand('copy')
-  document.body.removeChild(textarea)
-  if (!ok) throw new Error('浏览器未授予剪贴板权限')
 }
 
 function EmptyPrompt() {

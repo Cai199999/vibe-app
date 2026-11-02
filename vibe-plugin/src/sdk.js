@@ -116,6 +116,7 @@
           hitTest: true,
           elementsInBox: true,
           sourceSnippet: true,
+          pageFocus: true,
           maxSnapshotElements: MAX_SNAPSHOT_ELEMENTS,
           maxSnippetLines: MAX_SNIPPET_LINES,
           maxSnippetBytes: MAX_SNIPPET_BYTES,
@@ -491,6 +492,17 @@
     }, SNAPSHOT_DEBOUNCE_MS)
   }
 
+  /**
+   * 跨域 iframe 的鼠标事件不会冒泡到画布，父页面无法直接判断
+   * “用户正在浏览网页”。握手完成后由 SDK 在点击的真实页面上
+   * 发送一个不含 DOM 内容的焦点信号，画布只负责切换视觉状态。
+   */
+  const onPagePointerDown = () => {
+    if (!sessionToken) return
+    // 只发送会话凭证与固定类型，不携带点击坐标、元素或页面文本。
+    send(envelope('PAGE_FOCUS', { sessionToken }))
+  }
+
   window.addEventListener('message', (event) => {
     if (event.source !== window.parent || event.origin !== HOST_ORIGIN) return
     const message = event.data
@@ -556,9 +568,12 @@
     characterData: true,
   })
 
+  document.addEventListener('pointerdown', onPagePointerDown, true)
+
   window.addEventListener('load', startHelloLoop, { once: true })
   window.addEventListener('beforeunload', () => {
     stopHelloLoop()
+    document.removeEventListener('pointerdown', onPagePointerDown, true)
     observer.disconnect()
   })
 

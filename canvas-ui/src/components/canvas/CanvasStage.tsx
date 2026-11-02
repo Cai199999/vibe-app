@@ -119,6 +119,9 @@ interface CanvasStageProps {
   onAdd: (annotation: CanvasAnnotation) => void
   onSelect: (id: string) => void
   onUndo: () => void
+  /** 真实 iframe 当前是否持有鼠标焦点。 */
+  iframeFocused: boolean
+  onExitIframeFocus: () => void
   showToast: (message: string, tone?: ToastTone) => void
 }
 
@@ -135,6 +138,8 @@ export function CanvasStage({
   onAdd,
   onSelect,
   onUndo,
+  iframeFocused,
+  onExitIframeFocus,
   showToast,
 }: CanvasStageProps) {
   const {
@@ -929,6 +934,25 @@ export function CanvasStage({
     return () => window.removeEventListener('blur', onBlur)
   }, [])
 
+  /**
+   * iframe 内的 pointerdown 不会冒泡到父文档；因此只要父文档还能收到
+   * pointerdown，就说明用户点了网页外部。此时主动把 DOM 焦点收回画布，
+   * 让 window 上的 P / N / V 等快捷键立即可用。
+   */
+  useEffect(() => {
+    if (!iframeFocused) return
+
+    const releaseFocus = () => {
+      onExitIframeFocus()
+      canvasRef.current?.focus({ preventScroll: true })
+    }
+
+    document.addEventListener('pointerdown', releaseFocus, true)
+    return () => {
+      document.removeEventListener('pointerdown', releaseFocus, true)
+    }
+  }, [canvasRef, iframeFocused, onExitIframeFocus])
+
   const cursor = panning
     ? 'grabbing'
     : mode === 'hand' || spaceDown
@@ -940,7 +964,8 @@ export function CanvasStage({
   return (
     <main
       ref={canvasRef}
-      className={`canvas-grid relative min-w-0 flex-1 touch-none overflow-hidden ${
+      tabIndex={-1}
+      className={`canvas-grid relative min-w-0 flex-1 touch-none overflow-hidden outline-none ${
         panning ? 'cursor-grabbing' : spaceDown ? 'cursor-grab' : ''
       }`}
       onMouseDown={suppressMiddleClick}
