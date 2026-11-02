@@ -44,8 +44,42 @@ class Settings(BaseSettings):
     minio_bucket: str = "vibe-app"
     minio_secure: bool = False
 
-    # ---- AI（暂未启用，留空即可） ----
+    # ---- Prompt 服务 ----
+    # mock: 本地固定 Markdown；deepseek: 调用真实 API
+    prompt_provider: str = "mock"
+    allowed_origins: str = "http://127.0.0.1:5174,http://localhost:5174"
+
+    # ---- DeepSeek（OpenAI 兼容接口） ----
     deepseek_api_key: str = ""
+    deepseek_base_url: str = "https://api.deepseek.com"
+    deepseek_model: str = "deepseek-chat"
+    deepseek_timeout_seconds: float = 30.0
+    deepseek_max_tokens: int = 2000
+    deepseek_temperature: float = 0.2
+    deepseek_multimodal: bool = False
+
+    # ---- 接口上限（与 03.API接口设计.md 对齐） ----
+    max_snapshot_elements: int = 200
+    max_text_length: int = 200
+    max_neighbors: int = 6
+    max_snippet_lines: int = 40
+    max_snippet_bytes: int = 4096
+    max_image_bytes: int = 1024 * 1024
+    max_image_edge: int = 1600
+    max_points_per_stroke: int = 100
+    max_recorded_points_per_stroke: int = 5000
+    max_annotations_per_request: int = 50
+    max_request_body_bytes: int = 8 * 1024 * 1024
+    max_prompt_chars: int = 20000
+
+    @property
+    def allowed_origin_list(self) -> list[str]:
+        """把逗号分隔的 origin 配置解析为列表，并去掉空项。"""
+        return [
+            origin.strip()
+            for origin in self.allowed_origins.split(",")
+            if origin.strip()
+        ]
 
 
 @lru_cache
