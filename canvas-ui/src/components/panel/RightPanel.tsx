@@ -11,6 +11,7 @@ import { PromptResult } from './PromptResult'
 type Tab = 'annotations' | 'prompt'
 
 interface RightPanelProps {
+  collapsed: boolean
   annotations: CanvasAnnotation[]
   selectedId: string | null
   loading: boolean
@@ -24,6 +25,7 @@ interface RightPanelProps {
 }
 
 export function RightPanel({
+  collapsed,
   annotations,
   selectedId,
   loading,
@@ -48,7 +50,18 @@ export function RightPanel({
   }
 
   return (
-    <aside className="flex w-[400px] shrink-0 flex-col border-l border-white/[0.08] bg-[#0b0e14] xl:w-[420px]">
+    <aside
+      id="prompt-workbench"
+      data-testid="right-panel"
+      aria-hidden={collapsed}
+      inert={collapsed}
+      className={`flex shrink-0 flex-col overflow-hidden border-white/[0.08] bg-[#0b0e14] transition-[width,border-width] duration-200 ${
+        collapsed
+          ? 'w-0 border-l-0'
+          : 'w-[400px] border-l xl:w-[420px]'
+      }`}
+    >
+      <div className="flex h-full w-[400px] shrink-0 flex-col xl:w-[420px]">
       <div className="shrink-0 border-b border-white/[0.07] px-3 pb-2.5 pt-3">
         <div className="flex items-center justify-between px-0.5">
           <div>
@@ -155,6 +168,7 @@ export function RightPanel({
             {PROMPT_API_BASE.replace(/^https?:\/\//, '')}
           </span>
         </div>
+      </div>
       </div>
     </aside>
   )

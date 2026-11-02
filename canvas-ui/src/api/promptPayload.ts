@@ -2,7 +2,6 @@ import {
   DEFAULT_CANVAS_CONFIG,
   MAX_KEY_POINTS,
   MAX_PROMPT_CHARS,
-  PROJECT_INFO,
   PROTOCOL_VERSION,
 } from '../lib/constants'
 import { downsamplePoints, round, roundPoint, roundRect } from '../lib/geometry'
@@ -13,6 +12,7 @@ import type {
   CanvasAnnotation,
   DrawAnnotation,
   DragAnnotation,
+  LocalProject,
   Neighbor,
   PromptGenerateRequest,
   WorldTarget,
@@ -100,6 +100,7 @@ export function toApiAnnotation(
 
 export function buildPromptRequest(
   annotations: CanvasAnnotation[],
+  project: LocalProject,
 ): PromptGenerateRequest {
   if (annotations.length === 0) {
     throw new Error('至少需要一条标注才能生成 Prompt')
@@ -108,7 +109,11 @@ export function buildPromptRequest(
   return {
     requestId: createRequestId(),
     protocolVersion: PROTOCOL_VERSION,
-    project: PROJECT_INFO,
+    project: {
+      name: project.name,
+      framework: 'vite-react',
+      previewOrigin: project.origin,
+    },
     locale: 'zh-CN',
     annotations: annotations.map(toApiAnnotation),
     options: {

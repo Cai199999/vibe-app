@@ -132,8 +132,8 @@ flowchart LR
 | 缓存 | Redis | 已有 Docker；MVP 不依赖 |
 | 对象存储 | MinIO | 已有 Docker；MVP 不落盘图片 |
 | 画布工具 | Vite 8 + React 19 + TypeScript + TailwindCSS 4 | `canvas-ui/` 已实现画布、标注、L3 联调 |
-| 用户项目 | Vite + React + 自动注入 SDK + Vite 插件 | 待实现 |
-| 预览桥接 | 跨域 iframe + `postMessage` | 前端桥接已实现；当前接 Mock iframe |
+| 用户项目 | Vite + React + 自动注入 SDK + Vite 插件 | `vibe-plugin/` 已实现；`examples/vite-demo/` 可验证 |
+| 预览桥接 | 跨域 iframe + `postMessage` | 已接真实 Vite 项目；动态 Origin + SDK 握手 |
 | 大模型 | DeepSeek API | 可选接入；当前 Mock Markdown |
 | 配置 | pydantic-settings + `.env` | 已就绪 |
 
@@ -203,13 +203,14 @@ flowchart LR
 - [x] 阶段三：`docs/design/03.API接口设计.md` v1（2026-11-02）
 - [x] 阶段三：01 / 02 / 03 设计评审与接口决策（2026-11-02）
 - [x] 阶段四：L3 Prompt 后端服务、硬校验、Mock / DeepSeek Provider、pytest（2026-11-02）
-- [x] 阶段四：React 画布 `canvas-ui/`、无限画布、旁注 / 圈画 / 拖拽、Mock iframe 桥接（2026-11-02）
+- [x] 阶段四：React 画布 `canvas-ui/`、无限画布、旁注 / 圈画 / 拖拽（2026-11-02）
 - [x] 阶段四：前端 → `/api/v1/prompts/generate` 联调、Markdown 渲染、复制（2026-11-02）
-- [ ] 阶段四：真实 Vite 插件、`data-source` 注入、SDK 协议接入
+- [x] 阶段五：真实 Vite 插件、`data-source` 注入、SDK 协议接入（2026-11-02）
+- [x] 阶段五：滚轮反向/中键平移/工作区锁定/可折叠工作台/真实项目加载（2026-11-02）
 - [ ] 阶段四：真实 DeepSeek Provider 联调与 Prompt 质量评估
 - [ ] 阶段四：`localStorage` 历史、失效标注重定位、截图上传
 
-> 当前业务代码包含 `app/`（FastAPI L3）与 `canvas-ui/`（React 画布）；预览仍为 Mock iframe，真实 Vite 插件与 SDK 注入尚未实现。浏览器端到端已验证旁注 / 圈画 / 拖拽 → CORS 请求 → Markdown 展示。
+> 当前业务代码包含 `app/`（FastAPI L3）、`canvas-ui/`（React 画布）、`vibe-plugin/`（Vite 插件 + SDK）与 `examples/vite-demo/`（验证项目）。画布已能加载真实 Vite 项目并完成握手、快照、旁注与 L3 联调；交互模式下的 iframe 内输入事件仍由用户页面接管，这是浏览器跨域 iframe 的固有限制。
 
 ## 11. 约定
 

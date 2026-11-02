@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { PointerEvent as ReactPointerEvent } from 'react'
+import type {
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
+} from 'react'
 
 import { useCanvasViewport } from '../../hooks/useCanvasViewport'
 import type { ToastTone } from '../../hooks/useToast'
@@ -26,6 +29,7 @@ import type {
   BridgeTarget,
   CanvasAnnotation,
   ComposerDraft,
+  LocalProject,
   Mode,
   Point,
   Rect,
@@ -38,6 +42,7 @@ import { CanvasControls } from './CanvasControls'
 import { ComposerPopover } from './ComposerPopover'
 import { HoverBox } from './HoverBox'
 import { PreviewFrame } from './PreviewFrame'
+import { ProjectLauncher } from './ProjectLauncher'
 import { Icon } from '../ui/Icon'
 
 type Gesture =
@@ -60,8 +65,8 @@ type Gesture =
 type ComposerSeed = Omit<ComposerDraft, 'screen'>
 
 const MODE_HINT: Record<Mode, string> = {
-  interact: '预览可交互；切到「旁注」开始指认。',
-  hand: '拖动画布查看不同区域；Ctrl/⌘ + 滚轮缩放。',
+  interact: '预览可交互；滚轮/中键由页面接管，切到抓手或旁注再操作画布。',
+  hand: '拖动画布查看不同区域；滚轮缩放，按住中键拖拽平移。',
   note: '点击页面元素，写下修改意图。',
   draw: '按住拖动画圈，圈住要修改的区域。',
   drag: '拖拽元素表达目标位置，不会直接修改 DOM。',
@@ -102,6 +107,9 @@ function defaultTargetSummary(target: WorldTarget): string {
 
 interface CanvasStageProps {
   bridge: IframeBridge
+  project: LocalProject | null
+  onLoadProject: (project: LocalProject) => void
+  onChangeProject: () => void
   annotations: CanvasAnnotation[]
   selectedId: string | null
   mode: Mode
@@ -114,6 +122,9 @@ interface CanvasStageProps {
 
 export function CanvasStage({
   bridge,
+  project,
+  onLoadProject,
+  onChangeProject,
   annotations,
   selectedId,
   mode,
@@ -142,6 +153,7 @@ export function CanvasStage({
   } | null>(null)
   const [hoverTarget, setHoverTarget] = useState<WorldTarget | null>(null)
   const [spaceDown, setSpaceDown] = useState(false)
+  const [panning, setPanning] = useState(false)
 
   const gestureRef = useRef<Gesture | null>(null)
   const spaceRef = useRef(false)
@@ -529,6 +541,7 @@ export function CanvasStage({
         pointerId: event.pointerId,
       }
       hideHover()
+      setPanning(true)
       try {
         event.currentTarget.setPointerCapture(event.pointerId)
       } catch {
@@ -657,6 +670,7 @@ export function CanvasStage({
       gestureRef.current = null
 
       if (gesture.kind === 'pan') {
+        setPanning(false)
         return
       }
 
@@ -677,8 +691,20 @@ export function CanvasStage({
 
   const onCanvasPointerCancel = useCallback(() => {
     gestureRef.current = null
+    setPanning(false)
     setLiveDrawPoints(null)
     setLiveDrag(null)
+  }, [])
+
+  const suppressMiddleClick = useCallback(
+    (event: ReactMouseEvent<HTMLElement>) => {
+      if (event.button === 1) event.preventDefault()
+    },
+    [],
+  )
+
+  const stopAuxClick = useCallback((event: ReactMouseEvent<HTMLElement>) => {
+    if (event.button === 1) event.preventDefault()
   }, [])
 
   const saveComposer = useCallback(
@@ -730,17 +756,17 @@ export function CanvasStage({
     if (!element) return
 
     const onWheel = (event: WheelEvent) => {
+      // 工作区本身固定：滚轮只改变 artboard 的 transform，不滚动页面。
       event.preventDefault()
-      if (event.ctrlKey || event.metaKey) {
-        zoomAt(event.clientX, event.clientY, event.deltaY > 0 ? 0.92 : 1.08)
-      } else {
-        panBy(-event.deltaX, -event.deltaY)
-      }
+      if (event.deltaY === 0) return
+      // 按产品要求反向：上滑缩小，下滑放大。
+      const factor = event.deltaY > 0 ? 1.08 : 0.92
+      zoomAt(event.clientX, event.clientY, factor)
     }
 
     element.addEventListener('wheel', onWheel, { passive: false })
     return () => element.removeEventListener('wheel', onWheel)
-  }, [canvasRef, panBy, zoomAt])
+  }, [canvasRef, zoomAt])
 
   useEffect(() => {
     const isTyping = (target: EventTarget | null) => {
@@ -812,8 +838,30 @@ export function CanvasStage({
     }
   }, [clearLive, closeComposer, hideHover, onModeChange, onUndo])
 
-  const cursor =
-    mode === 'hand' || spaceDown
+  useEffect(() => {
+    if (!project) return
+    closeComposer()
+    hideHover()
+    setPanning(false)
+    const frame = requestAnimationFrame(fit)
+    return () => cancelAnimationFrame(frame)
+    // project.id 变化代表重新加载/切换项目，需要重新适配视图。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?.id])
+
+  useEffect(() => {
+    const onBlur = () => {
+      setPanning(false)
+      spaceRef.current = false
+      setSpaceDown(false)
+    }
+    window.addEventListener('blur', onBlur)
+    return () => window.removeEventListener('blur', onBlur)
+  }, [])
+
+  const cursor = panning
+    ? 'grabbing'
+    : mode === 'hand' || spaceDown
       ? 'grab'
       : mode === 'interact'
         ? 'default'
@@ -823,32 +871,35 @@ export function CanvasStage({
     <main
       ref={canvasRef}
       className={`canvas-grid relative min-w-0 flex-1 touch-none overflow-hidden ${
-        spaceDown ? 'cursor-grab' : ''
+        panning ? 'cursor-grabbing' : spaceDown ? 'cursor-grab' : ''
       }`}
-      style={{
-        backgroundSize: `${24 * viewport.zoom}px ${24 * viewport.zoom}px`,
-        backgroundPosition: `${viewport.pan.x}px ${viewport.pan.y}px`,
-      }}
+      onMouseDown={suppressMiddleClick}
+      onAuxClick={stopAuxClick}
       onPointerDown={onCanvasPointerDown}
       onPointerMove={onCanvasPointerMove}
       onPointerUp={onCanvasPointerUp}
       onPointerCancel={onCanvasPointerCancel}
       onPointerLeave={hideHover}
     >
-      <div
-        className="absolute left-0 top-0 origin-top-left"
-        style={{
-          width: ARTBOARD_WIDTH,
-          height: ARTBOARD_HEIGHT,
-          transform: `translate(${viewport.pan.x}px, ${viewport.pan.y}px) scale(${viewport.zoom})`,
-        }}
-      >
-        <PreviewFrame
-          iframeRef={bridge.iframeRef}
-          status={bridge.status}
-          revision={bridge.snapshot?.revision ?? null}
-          previewOrigin={window.location.origin}
-        />
+      {project ? (
+        <div
+          className="absolute left-0 top-0 origin-top-left will-change-transform"
+          data-testid="artboard"
+          style={{
+            width: ARTBOARD_WIDTH,
+            height: ARTBOARD_HEIGHT,
+            transform: `translate(${viewport.pan.x}px, ${viewport.pan.y}px) scale(${viewport.zoom})`,
+          }}
+          onMouseDown={suppressMiddleClick}
+          onAuxClick={stopAuxClick}
+        >
+          <PreviewFrame
+            iframeRef={bridge.iframeRef}
+            project={project}
+            status={bridge.status}
+            revision={bridge.snapshot?.revision ?? null}
+            onChangeProject={onChangeProject}
+          />
 
         <div
           data-testid="preview-capture"
@@ -875,37 +926,44 @@ export function CanvasStage({
           <HoverBox target={hoverTarget} zoom={viewport.zoom} />
         )}
 
-        <AnnotationPins
-          annotations={annotations}
-          selectedId={selectedId}
-          zoom={viewport.zoom}
-          onSelect={onSelect}
-        />
-      </div>
+          <AnnotationPins
+            annotations={annotations}
+            selectedId={selectedId}
+            zoom={viewport.zoom}
+            onSelect={onSelect}
+          />
+        </div>
+      ) : (
+        <ProjectLauncher onLoad={onLoadProject} />
+      )}
 
-      <div className="pointer-events-none absolute left-4 top-4 z-40 flex items-center gap-2 rounded-full border border-white/10 bg-[#0c0f15]/80 px-3 py-1.5 text-[10px] text-slate-400 backdrop-blur">
-        <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" />
-        <span>{MODE_LABEL[mode]}</span>
-        <span className="hidden text-slate-600 sm:inline">
-          {MODE_HINT[mode]}
-        </span>
-      </div>
+      {project && (
+        <>
+          <div className="pointer-events-none absolute left-4 top-4 z-40 flex items-center gap-2 rounded-full border border-white/10 bg-[#0c0f15]/80 px-3 py-1.5 text-[10px] text-slate-400 backdrop-blur">
+            <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" />
+            <span>{MODE_LABEL[mode]}</span>
+            <span className="hidden text-slate-600 sm:inline">
+              {MODE_HINT[mode]}
+            </span>
+          </div>
 
-      <div className="pointer-events-none absolute bottom-5 left-1/2 z-30 hidden -translate-x-1/2 items-center gap-3 rounded-full border border-white/[0.07] bg-[#0c0f15]/75 px-3 py-1.5 text-[10px] text-slate-500 backdrop-blur md:flex">
-        <span>空格 + 拖动 平移</span>
-        <span className="h-3 w-px bg-white/10" />
-        <span>⌘/Ctrl + 滚轮 缩放</span>
-        <span className="h-3 w-px bg-white/10" />
-        <span>Esc 取消</span>
-      </div>
+          <div className="pointer-events-none absolute bottom-5 left-1/2 z-30 hidden -translate-x-1/2 items-center gap-3 rounded-full border border-white/[0.07] bg-[#0c0f15]/75 px-3 py-1.5 text-[10px] text-slate-500 backdrop-blur md:flex">
+            <span>中键拖拽 / 空格 + 拖动 平移</span>
+            <span className="h-3 w-px bg-white/10" />
+            <span>滚轮 ↑ 缩小 · ↓ 放大</span>
+            <span className="h-3 w-px bg-white/10" />
+            <span>Esc 取消</span>
+          </div>
 
-      <CanvasControls
-        zoom={viewport.zoom}
-        onZoomIn={() => zoomBy(1.12)}
-        onZoomOut={() => zoomBy(0.89)}
-        onReset={resetZoom}
-        onFit={fit}
-      />
+          <CanvasControls
+            zoom={viewport.zoom}
+            onZoomIn={() => zoomBy(1.12)}
+            onZoomOut={() => zoomBy(0.89)}
+            onReset={resetZoom}
+            onFit={fit}
+          />
+        </>
+      )}
 
       {composer && (
         <ComposerPopover

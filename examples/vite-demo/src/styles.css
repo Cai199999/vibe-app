@@ -1,0 +1,299 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: #0f172a;
+  background: #eef2f7;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-width: 100%;
+  min-height: 100%;
+}
+
+body {
+  background: #eef2f7;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  display: flex;
+  width: 210px;
+  flex-shrink: 0;
+  flex-direction: column;
+  padding: 20px 14px;
+  color: #cbd5e1;
+  background: #0f172a;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 4px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.brand-mark {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #6366f1, #a855f7);
+}
+
+.sidebar nav {
+  display: grid;
+  gap: 3px;
+  margin-top: 28px;
+}
+
+.nav-item {
+  padding: 9px 10px;
+  border-radius: 8px;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.nav-item.active {
+  color: #fff;
+  background: #1e293b;
+}
+
+.sidebar-foot {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.avatar {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.sidebar-foot div {
+  display: grid;
+  gap: 2px;
+}
+
+.sidebar-foot strong {
+  color: #e2e8f0;
+  font-size: 11px;
+}
+
+.sidebar-foot small {
+  color: #64748b;
+  font-size: 9px;
+}
+
+.app-main {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 16px;
+  padding: 22px 28px 28px;
+}
+
+.topbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.eyebrow {
+  color: #94a3b8;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.topbar h1 {
+  margin: 4px 0 0;
+  font-size: 26px;
+  letter-spacing: -0.04em;
+}
+
+.primary-btn {
+  display: inline-flex;
+  height: 38px;
+  align-items: center;
+  gap: 9px;
+  padding: 0 15px;
+  border: 0;
+  border-radius: 9px;
+  background: #0f172a;
+  color: #fff;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.count {
+  display: grid;
+  min-width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  font-size: 9px;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.stat-card,
+.panel {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+.stat-card {
+  display: grid;
+  gap: 6px;
+  padding: 15px 16px;
+}
+
+.stat-label {
+  color: #64748b;
+  font-size: 10px;
+}
+
+.stat-value {
+  font-size: 25px;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.stat-trend {
+  color: #059669;
+  font-size: 9px;
+}
+
+.split {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 12px;
+}
+
+.panel {
+  padding: 15px 16px;
+}
+
+.panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.panel h2 {
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: -0.02em;
+}
+
+.panel p {
+  margin: 5px 0 0;
+  color: #64748b;
+  font-size: 10px;
+  line-height: 1.65;
+}
+
+.pill {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 9px;
+}
+
+.chart {
+  display: flex;
+  height: 150px;
+  align-items: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+  padding: 0 4px;
+}
+
+.chart span {
+  flex: 1;
+  border-radius: 5px 5px 2px 2px;
+  background: linear-gradient(180deg, #818cf8, #6366f1);
+  opacity: 0.85;
+}
+
+table {
+  width: 100%;
+  margin-top: 12px;
+  border-collapse: collapse;
+}
+
+th {
+  padding: 8px 0;
+  border-bottom: 1px solid #eef2f7;
+  color: #94a3b8;
+  font-size: 9px;
+  font-weight: 500;
+  text-align: left;
+}
+
+td {
+  padding: 9px 0;
+  border-bottom: 1px solid #f1f5f9;
+  color: #475569;
+  font-size: 10px;
+}
+
+tr:last-child td {
+  border-bottom: 0;
+}
+
+.status {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #4f46e5;
+  font-size: 9px;
+}
+
+.notes {
+  margin-top: auto;
+}

@@ -19,19 +19,6 @@ export const PROMPT_API_BASE = (
   import.meta.env.VITE_PROMPT_API_BASE || 'http://127.0.0.1:8000'
 ).replace(/\/$/, '')
 
-/**
- * 被嵌入页面的精确 Origin。
- * Mock iframe 与画布同源；接入真实项目后通过 VITE_PREVIEW_ORIGIN 改为 5173。
- */
-export const PREVIEW_ORIGIN =
-  import.meta.env.VITE_PREVIEW_ORIGIN || window.location.origin
-
-export const PROJECT_INFO = {
-  name: 'vibe-demo',
-  framework: 'vite-react' as const,
-  previewOrigin: PREVIEW_ORIGIN,
-}
-
 export const DEFAULT_CANVAS_CONFIG = {
   maxSnapshotElements: 200,
   maxTextLength: 200,

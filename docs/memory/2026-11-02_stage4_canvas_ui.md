@@ -11,6 +11,7 @@
 - 坐标链路：iframe-viewport → world（y + 44pt titlebar）→ L3。
 - iframe 桥接：`postMessage` 严格校验 origin / source / session / protocol major；支持 HELLO/WELCOME、SNAPSHOT、HIT_TEST、ELEMENTS_IN_BOX、SOURCE_SNIPPET_REQUEST、ERROR、PING/PONG。
 - Mock 预览 `public/mock-preview.html`：12 个 `data-source` 节点、JSX 片段注册表、隐藏节点过滤、快照上限、消息协议。
+  - 注：阶段五已删除该 Mock，改为加载真实本地 Vite 项目；本文仅保留历史记录。
 - 右侧工作台：标注列表、选中 / 删除 / 清空、生成指令、错误码、警告、目标文件、字符数、Markdown 安全渲染、复制。
 - CORS：前端 `127.0.0.1:5174` 已与 FastAPI 白名单对齐。
 

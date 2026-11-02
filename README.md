@@ -53,3 +53,31 @@ python3 -m http.server 8080
 - [API 接口设计](docs/design/03.API接口设计.md)
 
 设计文档为待审核草案；接口契约确认前不开始业务编码。
+
+
+## 真实预览画布（阶段五）
+
+```bash
+# 1) 后端
+source .venv/bin/activate
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+
+# 2) 示例 Vite 项目（已接入 @vibe/vite-plugin）
+cd examples/vite-demo
+npm install
+npm run dev
+# http://127.0.0.1:5173
+
+# 3) 画布
+cd ../../canvas-ui
+npm install
+npm run dev
+# http://127.0.0.1:5174，在中央输入 http://127.0.0.1:5173
+```
+
+核心接入方式：用户项目启用 `vibe()` 插件后，画布只需 iframe 加载 URL；
+插件自动注入 SDK 与 `data-source`，SDK 通过 `postMessage` 同步组件名、行号、JSX 片段。
+无需手动导入 HTML。详见 [`canvas-ui/README.md`](canvas-ui/README.md) 与
+[`vibe-plugin/README.md`](vibe-plugin/README.md)。
+
+画布操作：滚轮上滑缩小/下滑放大；按住中键拖拽平移；右侧工作台可折叠。

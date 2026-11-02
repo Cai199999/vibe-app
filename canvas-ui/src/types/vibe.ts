@@ -120,7 +120,19 @@ export interface SnippetResult {
   error?: BridgeError
 }
 
-export type BridgeStatus = 'connecting' | 'connected' | 'error'
+export type BridgeStatus = 'idle' | 'connecting' | 'connected' | 'error'
+
+/** 当前加载到画布中的本地项目。 */
+export interface LocalProject {
+  /** 每次加载生成新的 id，用于强制重建 iframe 并重置桥接状态。 */
+  id: string
+  name: string
+  /** 用户输入的完整地址（不含画布附加的握手参数）。 */
+  url: string
+  /** 用于 postMessage 校验的精确 Origin。 */
+  origin: string
+  loadedAt: string
+}
 
 export interface DrawVisual {
   rawPoints: Point[]

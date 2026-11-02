@@ -48,6 +48,7 @@ button:not(:disabled) {
 
 /* ---------------------------------------------------------------- 画布背景 */
 
+/* 工作区背景固定：点阵不随 artboard 的 pan / zoom 移动。 */
 .canvas-grid {
   background-color: #080a0f;
   background-image:
@@ -57,6 +58,13 @@ button:not(:disabled) {
       rgba(30, 41, 59, 0.35) 0%,
       transparent 68%
     );
+  background-size:
+    24px 24px,
+    100% 100%;
+  background-position:
+    0 0,
+    center;
+  overscroll-behavior: none;
 }
 
 /* ---------------------------------------------------------------- 通用控件 */

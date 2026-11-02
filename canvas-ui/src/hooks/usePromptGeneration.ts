@@ -2,7 +2,11 @@ import { useCallback, useState } from 'react'
 
 import { buildPromptRequest } from '../api/promptPayload'
 import { generatePrompt, PromptApiError } from '../api/promptApi'
-import type { CanvasAnnotation, PromptResponse } from '../types/vibe'
+import type {
+  CanvasAnnotation,
+  LocalProject,
+  PromptResponse,
+} from '../types/vibe'
 
 export interface PromptErrorState {
   message: string
@@ -27,10 +31,11 @@ export function usePromptGeneration() {
     async (
       annotations: CanvasAnnotation[],
       sessionToken: string,
+      project: LocalProject,
     ): Promise<PromptResponse | null> => {
       setState({ loading: true, error: null, response: null })
       try {
-        const payload = buildPromptRequest(annotations)
+        const payload = buildPromptRequest(annotations, project)
         const response = await generatePrompt(payload, sessionToken)
         setState({ loading: false, error: null, response })
         return response

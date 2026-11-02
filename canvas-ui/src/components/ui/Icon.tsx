@@ -18,6 +18,8 @@ export type IconName =
   | 'draw'
   | 'drag'
   | 'chevronDown'
+  | 'chevronLeft'
+  | 'chevronRight'
   | 'refresh'
   | 'code'
   | 'file'
@@ -105,6 +107,8 @@ const CONTENT: Record<IconName, ReactNode> = {
     </>
   ),
   chevronDown: <path d="M6 9l6 6 6-6" />,
+  chevronLeft: <path d="M15 18l-6-6 6-6" />,
+  chevronRight: <path d="M9 18l6-6-6-6" />,
   refresh: (
     <>
       <path d="M20 11a8 8 0 10-2.3 5.7" />

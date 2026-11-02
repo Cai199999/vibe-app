@@ -20,6 +20,11 @@ const STATUS_META: Record<
   BridgeStatus,
   { label: string; dot: string; text: string }
 > = {
+  idle: {
+    label: '未加载',
+    dot: 'bg-slate-500',
+    text: 'text-slate-400',
+  },
   connecting: {
     label: '连接中',
     dot: 'bg-amber-400',
@@ -40,7 +45,8 @@ interface TopBarProps {
   canUndo: boolean
   onUndo: () => void
   bridgeStatus: BridgeStatus
-  previewOrigin: string
+  previewOrigin: string | null
+  projectName: string | null
   /** null 表示握手成功但快照尚未到达。 */
   elementCount: number | null
 }
@@ -53,6 +59,7 @@ export function TopBar({
   onUndo,
   bridgeStatus,
   previewOrigin,
+  projectName,
   elementCount,
 }: TopBarProps) {
   const status = STATUS_META[bridgeStatus]
@@ -71,12 +78,14 @@ export function TopBar({
             visual intent → markdown prompt
           </div>
         </div>
-        <div className="ml-1 hidden min-w-0 items-center gap-1.5 rounded-lg bg-white/[0.04] px-2 py-1 ring-1 ring-white/[0.08] 2xl:flex">
-          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${status.dot}`} />
-          <span className="truncate font-mono text-[9px] text-slate-400">
-            {previewOrigin.replace(/^https?:\/\//, '')}
-          </span>
-        </div>
+        {previewOrigin && (
+          <div className="ml-1 hidden min-w-0 items-center gap-1.5 rounded-lg bg-white/[0.04] px-2 py-1 ring-1 ring-white/[0.08] 2xl:flex">
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${status.dot}`} />
+            <span className="truncate font-mono text-[9px] text-slate-400">
+              {previewOrigin.replace(/^https?:\/\//, '')}
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="flex min-w-0 flex-1 justify-center">
@@ -114,7 +123,9 @@ export function TopBar({
               ? elementCount === null
                 ? '握手成功，正在同步快照'
                 : `已同步 ${elementCount} 个 data-source 节点`
-              : '等待 mock iframe 握手'
+              : bridgeStatus === 'idle'
+                ? '尚未加载本地项目'
+                : '等待项目内 Vite SDK 握手'
           }
         >
           <span className={`h-1.5 w-1.5 rounded-full ${status.dot}`} />
@@ -126,8 +137,8 @@ export function TopBar({
           )}
         </span>
 
-        <span className="hidden items-center gap-1.5 rounded-full border border-indigo-400/20 bg-indigo-400/10 px-2.5 py-1 text-[9px] font-medium text-indigo-200 md:inline-flex">
-          Mock iframe
+        <span className="hidden max-w-[150px] items-center gap-1.5 truncate rounded-full border border-indigo-400/20 bg-indigo-400/10 px-2.5 py-1 text-[9px] font-medium text-indigo-200 md:inline-flex">
+          {projectName ?? '未加载项目'}
         </span>
 
         <button
